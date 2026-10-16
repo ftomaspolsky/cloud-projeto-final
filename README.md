@@ -3,7 +3,7 @@
 Plataforma de comércio conversacional na AWS: o cliente conversa com um vendedor de IA
 generativa que consulta dados reais e registra pedidos. O que se avalia é a arquitetura.
 
-- **Etapa 1:** construção manual em Ohio (`us-east-2`), só console e AWS CLI.
+- **Etapa 1:** construção manual em Ohio (`us-east-2`), 100% no console, sem código.
 - **Etapa 2:** reconstrução integral em Terraform em São Paulo (`sa-east-1`).
 
 **Estado:** esqueleto independente do tema. O domínio comercial ainda não foi escolhido.
@@ -53,7 +53,7 @@ Mande `X-Correlation-Id: <algo>` no cabeçalho e o mesmo id aparece no log do wo
 app/chat-service/   serviço síncrono (FastAPI)
 app/order-worker/   consumidor da fila
 local/              configuração do SQS local (ElasticMQ)
-docs/               arquitetura, recursos criados em Ohio, comandos usados
+docs/               arquitetura, recursos criados em Ohio, passos no console
 infra/terraform/    etapa 2 (São Paulo)
 ```
 
