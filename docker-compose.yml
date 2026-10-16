@@ -1,0 +1,56 @@
+# Ambiente local: os dois serviços + MySQL + um SQS local (ElasticMQ).
+# Serve para desenvolver sem AWS. A topologia é a mesma que vai para o ECS.
+#   cp .env.example .env
+#   docker compose up --build
+
+x-aws-local: &aws-local
+  AWS_REGION: us-east-2
+  AWS_ACCESS_KEY_ID: local          # o ElasticMQ não confere credencial
+  AWS_SECRET_ACCESS_KEY: local
+  SQS_ENDPOINT_URL: http://elasticmq:9324
+  QUEUE_NAME: pedidos
+
+x-db: &db
+  DB_HOST: mysql
+  DB_NAME: ${DB_NAME}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 20
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.6.9
+    volumes:
+      - ./local/elasticmq.conf:/opt/elasticmq.conf:ro
+    ports:
+      - "9324:9324"
+
+  chat-service:
+    build: ./app/chat-service
+    environment:
+      <<: [*aws-local]
+    ports:
+      - "8000:8000"
+    depends_on:
+      - elasticmq
+
+  order-worker:
+    build: ./app/order-worker
+    environment:
+      <<: [*aws-local, *db]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started

@@ -1,0 +1,25 @@
+# Segredos e credenciais — nunca entram no repositório (requisito do enunciado)
+.env
+.aws/
+*.pem
+*.key
+
+# Terraform: estado fica no backend remoto, nunca aqui
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+crash.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
