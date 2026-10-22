@@ -10,8 +10,20 @@ generativa que consulta dados reais e registra pedidos. O que se avalia é a arq
 pede pelo chat; a IA, como portaria digital, reserva área comum com taxa, abre ordem de
 serviço, autoriza visitante e consulta encomendas e cota.
 
-**Estado:** o código ainda é o esqueleto genérico ("pedidos"). Em Ohio, a rede começou (ver
-[docs/recursos-ohio.md](docs/recursos-ohio.md)).
+**Estado (22/10):** em Ohio estão prontos rede, security groups, RDS MySQL Multi-AZ e SQS
+com DLQ (ver [docs/recursos-ohio.md](docs/recursos-ohio.md)). O código ainda é o esqueleto
+genérico ("pedidos").
+
+**Onde paramos / próximo passo:**
+
+1. Anotar o **endpoint** do RDS (aba *Conectividade e segurança*) e o **ARN do segredo**
+   (aba *Configuração*, "Credenciais do usuário principal").
+2. Criar no ECR os repositórios `cloud-projeto-final/atendimento` e
+   `cloud-projeto-final/operacoes` (tags mutáveis, AES-256).
+3. Perguntar ao professor se o `docker push` pelo **CloudShell** cabe no "100% no console".
+   Se couber, as instâncias ECS são **t3** (x86), porque o CloudShell faz build x86.
+4. Adaptar o código ao condomínio.
+5. Launch Template + ASG + cluster ECS com Capacity Provider → ALB → serviços → alarmes.
 
 ## Arquitetura
 
