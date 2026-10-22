@@ -23,3 +23,9 @@ porque cada um é origem do seguinte:
 | `cloud-projeto-final-sg-ecs` | TCP 32768–65535, origem sg-alb | padrão (tudo) |
 | `cloud-projeto-final-sg-rds` | MYSQL/Aurora 3306, origem sg-ecs | **regra padrão excluída** |
 
+## 3. Banco (RDS)
+
+**3a. Grupo de sub-redes:** Aurora and RDS → Grupos de sub-redes → Criar. Nome
+`cloud-projeto-final-db-subnets`, VPC do projeto, AZs `us-east-2a` e `us-east-2b`, só as
+sub-redes **privadas** (`10.0.128.0/20` e `10.0.144.0/20`).
+
