@@ -11,3 +11,7 @@ conta: Resource Groups → Tag Editor → região us-east-2 → tag `projeto`.
 | 1 | VPC | `cloud-projeto-final-vpc` | `vpc-0a327d4e3c3062db9` | — | `10.0.0.0/16`, criada pelo assistente "VPC e mais" |
 | 2 | Elastic IP | `cloud-projeto-final-eip-us-east-2a` | `eipalloc-003162896f09e360b` | — | `18.224.239.52`, usado pelo NAT |
 | 3 | NAT Gateway | `cloud-projeto-final-nat-…` | `nat-0635a20e729ffe333` | 1, 2 | público, zonal, `us-east-2a`, IP privado `10.0.7.175`. **Cobra por hora mesmo parado** |
+| 4 | Sub-rede pública | `cloud-projeto-final-subnet-public1-…` | `subnet-07440cb508a6106e3` | 1 | `10.0.0.0/20`, AZ 1 (`us-east-2a`, pelo nome). Abriga o NAT |
+| 5 | Sub-rede pública | `cloud-projeto-final-subnet-public2-…` | `subnet-00444a0acd3aaf987` | 1 | `10.0.16.0/20`, AZ 2 |
+| 6 | Sub-rede privada | `cloud-projeto-final-subnet-private1-…` | `subnet-0c3184701a6a96bc0` | 1 | `10.0.128.0/20`, AZ 1 |
+| 7 | Sub-rede privada | `cloud-projeto-final-subnet-private2-…` | `subnet-0e9f6695edb9fdb93` | 1 | `10.0.144.0/20`, AZ 2 |
