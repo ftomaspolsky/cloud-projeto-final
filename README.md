@@ -6,7 +6,12 @@ generativa que consulta dados reais e registra pedidos. O que se avalia é a arq
 - **Etapa 1:** construção manual em Ohio (`us-east-2`), 100% no console, sem código.
 - **Etapa 2:** reconstrução integral em Terraform em São Paulo (`sa-east-1`).
 
-**Estado:** esqueleto independente do tema. O domínio comercial ainda não foi escolhido.
+**Tema:** atendente conversacional de condomínio. O morador (com login liberado por um admin)
+pede pelo chat; a IA, como portaria digital, reserva área comum com taxa, abre ordem de
+serviço, autoriza visitante e consulta encomendas e cota.
+
+**Estado:** o código ainda é o esqueleto genérico ("pedidos"). Em Ohio, a rede começou (ver
+[docs/recursos-ohio.md](docs/recursos-ohio.md)).
 
 ## Arquitetura
 

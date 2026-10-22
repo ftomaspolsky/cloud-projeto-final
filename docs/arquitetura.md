@@ -39,13 +39,22 @@ aceita `X-Correlation-Id` (ou gera um), devolve no cabeçalho da resposta e prop
 atributo da mensagem SQS. O worker loga com o mesmo id. No CloudWatch Logs Insights, filtrar
 por `correlation_id` mostra a jornada inteira de um pedido.
 
+## Decisões tomadas
+
+| Decisão | Valor | Por quê |
+|---|---|---|
+| Domínio | atendente de condomínio: reserva, OS, visitante, encomenda, cota | proposta do grupo (22/10) |
+| LLM | Amazon Bedrock | o grupo (22/10); fica dentro da AWS e a permissão é uma IAM role, sem chave externa |
+| Login | só morador, liberado por um admin que verifica. Visitante não tem login | o grupo (22/10) |
+| Aprovação | a IA aprova, como portaria digital, seguindo regras do sistema (conflito, limite por unidade) | o grupo (22/10) |
+| Reserva | **síncrona**: checar conflito e gravar reserva + lançamento numa transação no RDS. Só o que vem depois vai para a fila | o morador precisa da resposta na hora; e não existe reserva sem cobrança |
+| Rede das tasks | modo `bridge`, porta dinâmica no host, ALB com target tipo `instance` | menos peças que `awsvpc` (sem limite de ENI por instância); custo: um SG só para todas as tasks da instância |
+| NAT | 1 NAT Gateway, em `us-east-2a` | custo. Risco conhecido: se `us-east-2a` cair, a sub-rede privada de `us-east-2b` perde a saída |
+
 ## Decisões pendentes
 
 | Decisão | Depende de |
 |---|---|
-| Domínio comercial | o grupo |
-| Modelo de dados (catálogo, estoque, pedido) | domínio |
-| LLM (Bedrock ou API externa) e as ferramentas | domínio + disponibilidade de modelos nas duas regiões |
+| Modelo do Bedrock | disponibilidade em `us-east-2` e `sa-east-1` |
 | RDS Single-AZ ou Multi-AZ | custo × disponibilidade na troca de instância |
-| 1 NAT Gateway ou 1 por AZ (ou VPC endpoints) | custo × disponibilidade |
 | Tipo de instância e reservas de CPU/memória das tasks | medição de consumo dos containers |
