@@ -19,3 +19,6 @@ conta: Resource Groups → Tag Editor → região us-east-2 → tag `projeto`.
 | 9 | Security group | `cloud-projeto-final-sg-ecs` | `sg-07da3f8f8d5f227f0` | 1, 8 | entrada: TCP 32768–65535 só do sg-alb (porta dinâmica do modo `bridge`). Saída: tudo (ECR, Bedrock, SQS via NAT). Sem SSH |
 | 10 | Security group | `cloud-projeto-final-sg-rds` | `sg-01cd6f2c6e7520f26` | 1, 9 | entrada: MySQL 3306 só do sg-ecs. **Saída: nenhuma** |
 | 11 | DB subnet group | `cloud-projeto-final-db-subnets` | (o nome é o ID) | 6, 7 | só as 2 privadas, `us-east-2a` e `us-east-2b` |
+| 12 | RDS MySQL | `cloud-projeto-final-db` | (o nome é o ID) | 10, 11 | MySQL 8.4.11, `db.t4g.micro`, **Multi-AZ instância (2)**, gp3 20 GiB, sem acesso público, só sg-rds, senha gerenciada no Secrets Manager, banco inicial `condominio`, log de erros no CloudWatch, criptografia `aws/rds`, backup 7 dias, sem proteção contra exclusão. ~US$ 28/mês |
+| 13 | SQS (padrão) | `cloud-projeto-final-eventos-dlq` | — | — | retenção 14 dias. DLQ da fila 14 |
+| 14 | SQS (padrão) | `cloud-projeto-final-eventos` | — | 13 | visibilidade 60 s, long polling 20 s, redrive para a DLQ após **3** recebimentos, SSE-SQS |

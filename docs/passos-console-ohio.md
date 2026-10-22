@@ -29,3 +29,21 @@ porque cada um é origem do seguinte:
 `cloud-projeto-final-db-subnets`, VPC do projeto, AZs `us-east-2a` e `us-east-2b`, só as
 sub-redes **privadas** (`10.0.128.0/20` e `10.0.144.0/20`).
 
+**3b. Banco:** Bancos de dados → Criar → **Configuração completa**, MySQL 8.4.x, modelo
+**Dev/Test** (o "Produção" vem com `db.m7g.large` e 200 GiB, ~US$ 250/mês),
+**instância Multi-AZ (2 instâncias)**, `db.t4g.micro` (classes com capacidade de
+intermitência), gp3 20 GiB sem autoescala, credencial **gerenciada no Secrets Manager**,
+VPC do projeto, grupo `cloud-projeto-final-db-subnets`, acesso público **Não**, SG **só**
+`sg-rds` (tirar o `default`), Enhanced Monitoring desligado, exportar **log de erros**,
+banco inicial `condominio`, proteção contra exclusão desligada. Estimativa: US$ 27,96/mês.
+
+## 4. Filas (SQS)
+
+SQS → Criar fila, tipo **Padrão** (não FIFO: a duplicidade tem que ser tratada pela
+aplicação, e a demo mostra isso). DLQ primeiro:
+
+| Fila | Configuração |
+|---|---|
+| `cloud-projeto-final-eventos-dlq` | retenção 14 dias |
+| `cloud-projeto-final-eventos` | visibilidade 60 s, espera de recebimento 20 s, DLQ habilitada → `…-dlq`, máximo de recebimentos 3 |
+
