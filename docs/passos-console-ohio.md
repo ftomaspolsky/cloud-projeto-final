@@ -6,3 +6,20 @@ etapa 2 traduz para Terraform. Anote enquanto faz.
 
 ## 1. Rede (VPC)
 
+Assistente **VPC → Criar VPC → "VPC e mais"**, prefixo `cloud-projeto-final`, CIDR
+`10.0.0.0/16`, 2 AZs, 2 sub-redes públicas e 2 privadas (`/20`), **1 NAT Gateway** (em
+`us-east-2a`). O assistente cria junto o Internet Gateway, as tabelas de rota (pública →
+IGW, privada → NAT) e o Elastic IP do NAT.
+
+## 2. Security groups
+
+VPC → Grupos de segurança → Criar. Todos na `cloud-projeto-final-vpc`, tag
+`projeto=cloud-projeto-final`. Descrição sem acento (o campo não aceita). Ordem obrigatória,
+porque cada um é origem do seguinte:
+
+| Nome | Entrada | Saída |
+|---|---|---|
+| `cloud-projeto-final-sg-alb` | HTTP 80, origem `0.0.0.0/0` | padrão (tudo) |
+| `cloud-projeto-final-sg-ecs` | TCP 32768–65535, origem sg-alb | padrão (tudo) |
+| `cloud-projeto-final-sg-rds` | MYSQL/Aurora 3306, origem sg-ecs | **regra padrão excluída** |
+

@@ -15,3 +15,6 @@ conta: Resource Groups → Tag Editor → região us-east-2 → tag `projeto`.
 | 5 | Sub-rede pública | `cloud-projeto-final-subnet-public2-…` | `subnet-00444a0acd3aaf987` | 1 | `10.0.16.0/20`, AZ 2 |
 | 6 | Sub-rede privada | `cloud-projeto-final-subnet-private1-…` | `subnet-0c3184701a6a96bc0` | 1 | `10.0.128.0/20`, AZ 1 |
 | 7 | Sub-rede privada | `cloud-projeto-final-subnet-private2-…` | `subnet-0e9f6695edb9fdb93` | 1 | `10.0.144.0/20`, AZ 2 |
+| 8 | Security group | `cloud-projeto-final-sg-alb` | `sg-05b9ae0a9518444cf` | 1 | entrada: HTTP 80 de `0.0.0.0/0`. Saída: tudo |
+| 9 | Security group | `cloud-projeto-final-sg-ecs` | `sg-07da3f8f8d5f227f0` | 1, 8 | entrada: TCP 32768–65535 só do sg-alb (porta dinâmica do modo `bridge`). Saída: tudo (ECR, Bedrock, SQS via NAT). Sem SSH |
+| 10 | Security group | `cloud-projeto-final-sg-rds` | `sg-01cd6f2c6e7520f26` | 1, 9 | entrada: MySQL 3306 só do sg-ecs. **Saída: nenhuma** |
