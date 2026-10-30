@@ -10,20 +10,25 @@ generativa que consulta dados reais e registra pedidos. O que se avalia é a arq
 pede pelo chat; a IA, como portaria digital, reserva área comum com taxa, abre ordem de
 serviço, autoriza visitante e consulta encomendas e cota.
 
-**Estado (22/10):** em Ohio estão prontos rede, security groups, RDS MySQL Multi-AZ e SQS
-com DLQ (ver [docs/recursos-ohio.md](docs/recursos-ohio.md)). O código ainda é o esqueleto
-genérico ("pedidos").
+**Estado (30/10): a infraestrutura da etapa 1 está toda de pé em Ohio.** Rede, security
+groups, RDS Multi-AZ, SQS com DLQ, ECR, 4 roles IAM, grupos de log, target group, ALB,
+Launch Template, ASG (2 × `t3.small`, uma por AZ, já registradas no cluster), cluster ECS e
+Capacity Provider como estratégia padrão. Lista com IDs em
+[docs/recursos-ohio.md](docs/recursos-ohio.md). O ALB responde
+`http://cloud-projeto-final-alb-1611305876.us-east-2.elb.amazonaws.com` com **503**, o
+esperado enquanto não há task. O código ainda é o esqueleto genérico ("pedidos").
 
-**Onde paramos / próximo passo:**
+**Onde paramos / próximo passo (a aplicação):**
 
-1. Anotar o **endpoint** do RDS (aba *Conectividade e segurança*) e o **ARN do segredo**
-   (aba *Configuração*, "Credenciais do usuário principal").
-2. Criar no ECR os repositórios `cloud-projeto-final/atendimento` e
-   `cloud-projeto-final/operacoes` (tags mutáveis, AES-256).
-3. Perguntar ao professor se o `docker push` pelo **CloudShell** cabe no "100% no console".
-   Se couber, as instâncias ECS são **t3** (x86), porque o CloudShell faz build x86.
-4. Adaptar o código ao condomínio.
-5. Launch Template + ASG + cluster ECS com Capacity Provider → ALB → serviços → alarmes.
+1. Adaptar o código ao condomínio (`chat-service` → `atendimento`, `order-worker` →
+   `operacoes`), escolher o modelo do Bedrock e acrescentar a permissão dele na role
+   `cloud-projeto-final-role-app-atendimento`.
+2. `docker build` + `docker push` pelo **CloudShell** para os dois repositórios do ECR.
+3. Task definitions (modo `bridge`, porta do host 0, log nos grupos `/ecs/cloud-projeto-final/…`,
+   senha do banco pelo ARN do segredo, roles de execução e de aplicação).
+4. Serviços ECS: `atendimento` ligado ao target group `cloud-projeto-final-tg-atend`;
+   `operacoes` sem load balancer.
+5. Escala das tasks, alarmes do CloudWatch e as demos de falha.
 
 ## Arquitetura
 

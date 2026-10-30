@@ -50,6 +50,9 @@ por `correlation_id` mostra a jornada inteira de um pedido.
 | Reserva | **síncrona**: checar conflito e gravar reserva + lançamento numa transação no RDS. Só o que vem depois vai para a fila | o morador precisa da resposta na hora; e não existe reserva sem cobrança |
 | Rede das tasks | modo `bridge`, porta dinâmica no host, ALB com target tipo `instance` | menos peças que `awsvpc` (sem limite de ENI por instância); custo: um SG só para todas as tasks da instância |
 | NAT | 1 NAT Gateway, em `us-east-2a` | custo. Risco conhecido: se `us-east-2a` cair, a sub-rede privada de `us-east-2b` perde a saída |
+| Publicar imagem na etapa 1 | **build e push pelo CloudShell**, o terminal dentro do console | o enunciado permite "console e AWS CLI" na etapa 1; o CloudShell fica dentro do console, já autenticado na conta, sem chave no PC. Decisão do grupo, sem consulta ao professor (30/10) |
+| Instância do ECS | **t3 (x86)**, tamanho `t3.small` (2 vCPU, 2 GiB) | o CloudShell gera imagem x86, e t4g (ARM) não roda essa imagem. 2 GiB cabem os dois serviços + o agente do ECS e ainda deixam a escala de tasks visível antes de precisar de outra instância |
+| Roles da aplicação | **uma por serviço** (`app-atendimento`, `app-operacoes`) | menor privilégio: quem publica não consome, e só o `atendimento` vai chamar o Bedrock |
 
 ## Decisões pendentes
 
@@ -57,4 +60,4 @@ por `correlation_id` mostra a jornada inteira de um pedido.
 |---|---|
 | Modelo do Bedrock | disponibilidade em `us-east-2` e `sa-east-1` |
 | RDS Single-AZ ou Multi-AZ | custo × disponibilidade na troca de instância |
-| Tipo de instância e reservas de CPU/memória das tasks | medição de consumo dos containers |
+| Reservas de CPU/memória das tasks | medição de consumo dos containers (a instância já é `t3.small`) |
