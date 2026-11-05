@@ -2,6 +2,8 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Certificado do RDS, válido em todas as regiões. O caminho entra na task por DB_SSL_CA.
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/app/rds-ca.pem')"
 COPY worker.py .
 RUN useradd --create-home app
 USER app

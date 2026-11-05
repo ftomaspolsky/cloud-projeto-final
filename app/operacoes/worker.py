@@ -1,15 +1,16 @@
-"""order-worker — o serviço assíncrono, consumidor da fila de pedidos.
+"""operacoes — o serviço assíncrono, consumidor da fila de eventos.
 
-Três garantias que o enunciado pede, já no esqueleto:
+Recebe `ReservaSolicitada` e faz o que vem depois da reserva: gera a cobrança e registra o aviso
+ao morador. As três garantias que o enunciado pede:
 - repetição: se o processamento falha, a mensagem NÃO é apagada e volta para a fila depois
   do visibility timeout;
-- duplicidade: cada pedido_id é gravado numa tabela com chave primária, então a mesma
-  mensagem entregue duas vezes é processada uma vez só;
-- mensagem não processável: depois de N recebimentos sem sucesso, a própria fila a manda
-  para a DLQ (configurado na fila, não aqui).
+- duplicidade: cada evento_id é gravado numa tabela com chave primária, na mesma transação do
+  efeito, então o mesmo evento entregue duas vezes é processado uma vez só;
+- mensagem não processável: depois de 3 recebimentos sem sucesso, a própria fila a manda para
+  a DLQ (configurado na fila, não aqui).
 
 Ao receber SIGTERM (o ECS manda isso ao parar uma task, inclusive na drenagem de uma
-instância), o worker termina a mensagem atual e sai, sem pegar mensagem nova.
+instância), o worker termina o lote atual e sai, sem pegar mensagem nova.
 """
 
 import json
@@ -24,7 +25,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import boto3
 import pymysql
 
-SERVICO = "order-worker"
+SERVICO = "operacoes"
+TIPO_RESERVA = "ReservaSolicitada"
+# Banco fora do ar não é culpa da mensagem. Esperar evita gastar as 3 entregas à toa e mandar
+# um evento válido para a DLQ durante um failover do RDS.
+ESPERA_BANCO_FORA_SEGUNDOS = 60
 parar = threading.Event()
 
 
@@ -48,26 +53,47 @@ log.setLevel(logging.INFO)
 
 
 def conectar():
+    opcoes = {}
+    # Na AWS, o caminho do certificado do RDS vem por variável de ambiente. Local não há TLS.
+    if os.environ.get("DB_SSL_CA"):
+        opcoes = {
+            "ssl_ca": os.environ["DB_SSL_CA"],
+            "ssl_verify_cert": True,
+            "ssl_verify_identity": True,
+        }
     return pymysql.connect(
         host=os.environ["DB_HOST"],
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
         database=os.environ["DB_NAME"],
+        charset="utf8mb4",
         autocommit=False,
+        connect_timeout=5,
+        **opcoes,
     )
 
 
 def preparar_banco():
-    # Tabela de idempotência. Não depende do tema: guarda só o id de cada pedido processado.
+    # Só as tabelas deste serviço. Sem chave estrangeira para as do `atendimento`, porque não
+    # há garantia de qual dos dois sobe primeiro.
     for tentativa in range(30):
         try:
             with conectar() as conexao, conexao.cursor() as cursor:
                 cursor.execute(
-                    """CREATE TABLE IF NOT EXISTS pedidos_processados (
-                           pedido_id VARCHAR(64) PRIMARY KEY,
+                    """CREATE TABLE IF NOT EXISTS evento_processado (
+                           evento_id VARCHAR(36) PRIMARY KEY,
                            processado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                        )"""
                 )
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS notificacao (
+                           id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                           reserva_id BIGINT NOT NULL,
+                           texto VARCHAR(255) NOT NULL,
+                           criada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                       )"""
+                )
+                conexao.commit()
             return
         except pymysql.err.OperationalError:
             log.info("banco ainda indisponivel", extra={"extra_campos": {"tentativa": tentativa}})
@@ -75,22 +101,37 @@ def preparar_banco():
     raise RuntimeError("banco indisponivel")
 
 
-def processar(corpo, correlation_id):
-    campos = {"pedido_id": corpo["pedido_id"], "correlation_id": correlation_id}
-    if corpo.get("falhar"):
-        raise ValueError("mensagem marcada como nao processavel")
+def processar(corpo, cid):
+    if corpo.get("tipo") != TIPO_RESERVA:
+        raise ValueError(f"tipo de evento desconhecido: {corpo.get('tipo')}")
+    evento_id = corpo["evento_id"]
+    campos = {"evento_id": evento_id, "correlation_id": cid}
+
     with conectar() as conexao, conexao.cursor() as cursor:
         try:
-            # O registro de idempotência e o efeito do pedido entram na MESMA transação.
-            # Quando o tema existir, a baixa de estoque e o INSERT do pedido vão aqui dentro.
-            cursor.execute(
-                "INSERT INTO pedidos_processados (pedido_id) VALUES (%s)", (corpo["pedido_id"],)
-            )
-            conexao.commit()
-            log.info("pedido processado", extra={"extra_campos": campos})
+            # O registro de idempotência e o efeito do evento entram na MESMA transação.
+            cursor.execute("INSERT INTO evento_processado (evento_id) VALUES (%s)", (evento_id,))
         except pymysql.err.IntegrityError:
             conexao.rollback()
-            log.info("pedido duplicado ignorado", extra={"extra_campos": campos})
+            log.info("evento duplicado ignorado", extra={"extra_campos": campos})
+            return
+
+        # Simula o pedido de cobrança à integração de pagamento, que é fora do escopo do MVP.
+        alteradas = cursor.execute(
+            """UPDATE lancamento_financeiro
+               SET status = 'cobranca_gerada', referencia_pagamento = %s
+               WHERE id = %s AND reserva_id = %s AND status = 'pendente'""",
+            (f"PIX-{evento_id}", corpo["lancamento_id"], corpo["reserva_id"]),
+        )
+        if alteradas != 1:
+            raise ValueError("lancamento inexistente ou ja cobrado")
+
+        cursor.execute(
+            "INSERT INTO notificacao (reserva_id, texto) VALUES (%s, %s)",
+            (corpo["reserva_id"], "Sua reserva foi confirmada e a cobrança está disponível."),
+        )
+        conexao.commit()
+    log.info("evento processado", extra={"extra_campos": campos})
 
 
 class Health(BaseHTTPRequestHandler):
@@ -133,6 +174,13 @@ def main():
             try:
                 processar(json.loads(mensagem["Body"]), cid)
                 sqs.delete_message(QueueUrl=url, ReceiptHandle=mensagem["ReceiptHandle"])
+            except pymysql.err.OperationalError as erro:
+                log.error("banco fora do ar", extra={"extra_campos": {
+                    "correlation_id": cid,
+                    "erro": str(erro),
+                }})
+                parar.wait(ESPERA_BANCO_FORA_SEGUNDOS)
+                break
             except Exception as erro:
                 # Não apaga: a fila reentrega, e depois de maxReceiveCount manda para a DLQ.
                 log.error("falha ao processar", extra={"extra_campos": {

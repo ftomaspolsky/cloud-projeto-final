@@ -1,0 +1,356 @@
+"""Testes do fluxo inteiro, contra MySQL e fila de verdade em containers. O modelo é simulado.
+
+Rodar: docker compose --profile teste run --rm --build testes
+"""
+
+import json
+import os
+import random
+import threading
+import time
+import uuid
+from datetime import timedelta
+
+import boto3
+import pytest
+import requests
+
+import banco
+import eventos
+import reservas
+
+ATENDIMENTO = "http://atendimento:8000"
+MODELO = "http://bedrock-fake:9000"
+SALAO = "Salão de festas"
+
+sqs = boto3.client("sqs", region_name=os.environ["AWS_REGION"], endpoint_url=os.environ["SQS_ENDPOINT_URL"])
+FILA = sqs.get_queue_url(QueueName=os.environ["QUEUE_NAME"])["QueueUrl"]
+DLQ = sqs.get_queue_url(QueueName=os.environ["QUEUE_NAME"] + "-dlq")["QueueUrl"]
+
+
+def consulta(sql, *parametros):
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        cursor.execute(sql, parametros)
+        return cursor.fetchall()
+
+
+def contar(tabela):
+    return consulta(f"SELECT COUNT(*) AS total FROM {tabela}")[0]["total"]
+
+
+def esperar(condicao, segundos=30):
+    limite = time.monotonic() + segundos
+    while time.monotonic() < limite:
+        valor = condicao()
+        if valor:
+            return valor
+        time.sleep(0.5)
+    return condicao()
+
+
+def data_futura():
+    return (reservas.hoje() + timedelta(days=random.randint(1, 170))).isoformat()
+
+
+def modo_do_modelo(valor):
+    requests.post(f"{MODELO}/_modo/{valor}", timeout=5).raise_for_status()
+
+
+def chat(mensagem, conversa_id=None, cabecalhos=None):
+    corpo = {"mensagem": mensagem}
+    if conversa_id:
+        corpo["conversa_id"] = conversa_id
+    return requests.post(f"{ATENDIMENTO}/chat", json=corpo, headers=cabecalhos, timeout=60)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def sistema_no_ar():
+    def pronto():
+        try:
+            return requests.get(f"{ATENDIMENTO}/menu/areas", timeout=3).status_code == 200
+        except requests.RequestException:
+            return False
+
+    assert esperar(pronto, 90), "o atendimento não ficou pronto"
+    # O operacoes cria as tabelas dele ao subir.
+    assert esperar(lambda: consulta("SHOW TABLES LIKE 'evento_processado'"), 60)
+
+
+@pytest.fixture(autouse=True)
+def base_limpa():
+    assert os.environ["DB_HOST"] == "mysql", "este teste apaga dados: só roda no banco local"
+    modo_do_modelo("normal")
+    requests.delete(f"{MODELO}/_requisicoes", timeout=5)
+    sqs.purge_queue(QueueUrl=FILA)
+    sqs.purge_queue(QueueUrl=DLQ)
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        for tabela in [
+            "notificacao", "evento_processado", "evento_saida",
+            "lancamento_financeiro", "reserva", "mensagem",
+        ]:
+            cursor.execute(f"DELETE FROM {tabela}")
+        conexao.commit()
+
+
+def test_health_nao_depende_de_nada():
+    assert requests.get(f"{ATENDIMENTO}/health", timeout=5).json()["status"] == "ok"
+
+
+def test_pagina_de_chat():
+    resposta = requests.get(f"{ATENDIMENTO}/", timeout=5)
+    assert resposta.status_code == 200
+    assert "text/html" in resposta.headers["content-type"]
+
+
+def test_jornada_completa_da_conversa_ate_a_cobranca():
+    cid = str(uuid.uuid4())
+    resposta = chat(f"reserva o salão em {data_futura()} à noite", cabecalhos={"X-Correlation-Id": cid})
+
+    assert resposta.status_code == 200
+    assert resposta.headers["X-Correlation-Id"] == cid
+    corpo = resposta.json()
+    assert corpo["modo"] == "ia"
+    assert "reserva_id" in corpo["resposta"]
+
+    assert contar("reserva") == 1
+    assert consulta("SELECT valor FROM lancamento_financeiro")[0]["valor"] == 150
+    assert consulta("SELECT correlation_id FROM evento_saida")[0]["correlation_id"] == cid
+
+    # O operacoes, do outro lado da fila, gera a cobrança e o aviso.
+    assert esperar(lambda: consulta(
+        "SELECT 1 FROM lancamento_financeiro WHERE status = 'cobranca_gerada' AND referencia_pagamento LIKE 'PIX-%%'"
+    ))
+    assert contar("notificacao") == 1
+    assert contar("evento_processado") == 1
+    # A conversa fica gravada: é dado persistente, não memória da task.
+    assert [m["papel"] for m in consulta("SELECT papel FROM mensagem ORDER BY id")] == ["user", "assistant"]
+
+
+def test_consulta_real_mostra_o_que_esta_ocupado():
+    data = data_futura()
+    livre = chat(f"o salão está livre em {data}?").json()["resposta"]
+    assert "noite" in livre
+    assert contar("reserva") == 0, "consultar não pode criar reserva"
+
+    assert chat(f"reserva o salão em {data} à noite").status_code == 200
+    depois = chat(f"o salão está livre em {data}?").json()["resposta"]
+    assert '"periodos_livres": ["manha", "tarde"]' in depois
+
+
+def test_horario_ocupado_e_recusado_sem_gravar_nada():
+    data = data_futura()
+    chat(f"reserva o salão em {data} à noite")
+    resposta = chat(f"reserva o salão em {data} à noite").json()
+
+    assert "horario_ocupado" in resposta["resposta"]
+    assert contar("reserva") == 1
+    assert contar("lancamento_financeiro") == 1
+
+
+def test_pedidos_simultaneos_geram_uma_reserva_so():
+    data = data_futura()
+    resultados = []
+
+    def tentar():
+        try:
+            reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
+            resultados.append("ok")
+        except reservas.ReservaRecusada as recusa:
+            resultados.append(recusa.motivo)
+
+    tarefas = [threading.Thread(target=tentar) for _ in range(8)]
+    for tarefa in tarefas:
+        tarefa.start()
+    for tarefa in tarefas:
+        tarefa.join()
+
+    assert sorted(resultados) == ["horario_ocupado"] * 7 + ["ok"]
+    assert contar("reserva") == 1
+    assert contar("lancamento_financeiro") == 1
+
+
+def test_limite_de_reservas_por_unidade():
+    amanha = reservas.hoje() + timedelta(days=1)
+    for dias in range(3):
+        reservas.criar_reserva(SALAO, (amanha + timedelta(days=dias)).isoformat(), "noite", banco.MORADOR_DEMO_ID)
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.criar_reserva(SALAO, (amanha + timedelta(days=9)).isoformat(), "noite", banco.MORADOR_DEMO_ID)
+    assert recusa.value.motivo == "limite_da_unidade"
+    assert contar("reserva") == 3
+
+
+@pytest.mark.parametrize("area, data, periodo, motivo", [
+    (SALAO, "2020-01-01", "noite", "data_no_passado"),
+    (SALAO, "amanha", "noite", "data_invalida"),
+    (SALAO, "2999-01-01", "noite", "data_muito_distante"),
+    (SALAO, None, "madrugada", "periodo_invalido"),
+    ("Piscina", None, "noite", "area_inexistente"),
+])
+def test_pedidos_invalidos_sao_recusados(area, data, periodo, motivo):
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.criar_reserva(area, data or data_futura(), periodo, banco.MORADOR_DEMO_ID)
+    assert recusa.value.motivo == motivo
+    assert contar("reserva") == 0
+
+
+@pytest.mark.parametrize("etapa", ["_gravar_lancamento", "_gravar_evento"])
+def test_falha_no_meio_da_reserva_nao_deixa_nada_pela_metade(monkeypatch, etapa):
+    def quebrar(*_args, **_kwargs):
+        raise RuntimeError("simulado: processo caiu no meio da transação")
+
+    monkeypatch.setattr(reservas, etapa, quebrar)
+    with pytest.raises(RuntimeError):
+        reservas.criar_reserva(SALAO, data_futura(), "noite", banco.MORADOR_DEMO_ID)
+
+    assert contar("reserva") == 0
+    assert contar("lancamento_financeiro") == 0
+    assert contar("evento_saida") == 0
+
+
+def test_fila_fora_do_ar_nao_perde_o_evento(monkeypatch):
+    from botocore.exceptions import EndpointConnectionError
+
+    def fila_fora(**_kwargs):
+        raise EndpointConnectionError(endpoint_url="http://fila-fora")
+
+    with monkeypatch.context() as contexto:
+        contexto.setattr(eventos.sqs, "send_message", fila_fora)
+        # A reserva vale, mesmo sem conseguir publicar.
+        reserva = reservas.criar_reserva(SALAO, data_futura(), "noite", banco.MORADOR_DEMO_ID)
+
+    assert reserva["reserva_id"]
+    assert contar("evento_saida") == 1
+    # Com a fila de volta, o evento sai e a cobrança acontece.
+    assert esperar(lambda: consulta("SELECT 1 FROM lancamento_financeiro WHERE status = 'cobranca_gerada'"))
+
+
+def test_evento_repetido_e_processado_uma_vez_so():
+    reservas.criar_reserva(SALAO, data_futura(), "noite", banco.MORADOR_DEMO_ID)
+    assert esperar(lambda: contar("evento_processado") == 1)
+
+    corpo = consulta("SELECT corpo FROM evento_saida")[0]["corpo"]
+    sqs.send_message(QueueUrl=FILA, MessageBody=corpo)
+    sqs.send_message(QueueUrl=FILA, MessageBody=corpo)
+    # Espera a fila esvaziar: os dois repetidos foram consumidos e apagados.
+    assert esperar(lambda: fila_vazia(FILA))
+
+    assert contar("evento_processado") == 1
+    assert contar("notificacao") == 1
+    assert consultar_dlq() == []
+
+
+def fila_vazia(url):
+    atributos = sqs.get_queue_attributes(
+        QueueUrl=url,
+        AttributeNames=["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible"],
+    )["Attributes"]
+    return int(atributos["ApproximateNumberOfMessages"]) == 0 and int(atributos["ApproximateNumberOfMessagesNotVisible"]) == 0
+
+
+def consultar_dlq():
+    return sqs.receive_message(QueueUrl=DLQ, MaxNumberOfMessages=10, WaitTimeSeconds=1, VisibilityTimeout=0).get("Messages", [])
+
+
+@pytest.mark.parametrize("corpo", [
+    "isto nao e json",
+    json.dumps({"tipo": "EventoQueNaoExiste", "evento_id": "x"}),
+    json.dumps({"tipo": "ReservaSolicitada", "evento_id": str(uuid.uuid4()), "reserva_id": 999, "lancamento_id": 999}),
+])
+def test_mensagem_com_defeito_vai_para_a_dlq_depois_de_3_tentativas(corpo):
+    sqs.send_message(QueueUrl=FILA, MessageBody=corpo)
+    # Visibility timeout local de 10 s: 3 entregas levam cerca de 30 s.
+    mensagens = esperar(consultar_dlq, 60)
+    assert [m["Body"] for m in mensagens] == [corpo]
+    # A falha desfaz a idempotência junto: nada de "processado" sem ter processado.
+    assert contar("evento_processado") == 0
+
+
+@pytest.mark.parametrize("falha", ["fora", "sem_permissao", "cortado"])
+def test_modelo_com_problema_cai_no_menu_sem_perder_o_pedido(falha):
+    modo_do_modelo(falha)
+    data = data_futura()
+    pedido = f"reserva o salão em {data} à noite"
+    resposta = chat(pedido)
+
+    assert resposta.status_code == 200
+    assert resposta.json()["modo"] == "menu"
+    assert consulta("SELECT texto FROM mensagem WHERE papel = 'user'")[0]["texto"] == pedido
+    assert contar("reserva") == 0
+
+    # O morador conclui pelo menu, nas mesmas regras e com a mesma cobrança.
+    pelo_menu = requests.post(
+        f"{ATENDIMENTO}/menu/reservas",
+        json={"area": SALAO, "data": data, "periodo": "noite"},
+        timeout=10,
+    )
+    assert pelo_menu.status_code == 201
+    assert esperar(lambda: consulta("SELECT 1 FROM lancamento_financeiro WHERE status = 'cobranca_gerada'"))
+
+
+def test_menu_recusa_horario_ocupado():
+    pedido = {"area": SALAO, "data": data_futura(), "periodo": "noite"}
+    assert requests.post(f"{ATENDIMENTO}/menu/reservas", json=pedido, timeout=10).status_code == 201
+    repetido = requests.post(f"{ATENDIMENTO}/menu/reservas", json=pedido, timeout=10)
+    assert repetido.status_code == 409
+    assert repetido.json()["recusada"] == "horario_ocupado"
+
+
+def test_modelo_cai_depois_de_reservar_e_o_morador_fica_sabendo():
+    modo_do_modelo("falha_depois_da_ferramenta")
+    corpo = chat(f"reserva o salão em {data_futura()} à noite").json()
+
+    assert corpo["modo"] == "ia", "mandar para o menu faria o morador reservar de novo"
+    assert "foi registrada" in corpo["resposta"]
+    assert contar("reserva") == 1
+
+
+def test_o_que_vai_para_o_modelo():
+    chat(f"reserva o salão em {data_futura()} à noite")
+    primeira, segunda = requests.get(f"{MODELO}/_requisicoes", timeout=5).json()
+
+    assert primeira["modelo"] == os.environ["BEDROCK_MODEL_ID"]
+    nomes = [f["toolSpec"]["name"] for f in primeira["toolConfig"]["tools"]]
+    assert nomes == ["consultar_disponibilidade", "criar_reserva"]
+    # O Haiku 5.5 recusa parâmetros de amostragem diferentes do padrão.
+    assert set(primeira["inferenceConfig"]) == {"maxTokens"}
+    # O morador não é decisão do modelo.
+    campos = {
+        campo
+        for f in primeira["toolConfig"]["tools"]
+        for campo in f["toolSpec"]["inputSchema"]["json"]["properties"]
+    }
+    assert campos == {"area", "data", "periodo"}
+
+    # A mensagem do assistente volta intacta, com o raciocínio, junto com o resultado.
+    assistente, resultado = segunda["messages"][-2:]
+    assert assistente["role"] == "assistant"
+    assert "reasoningContent" in assistente["content"][0]
+    assert any("toolUse" in bloco for bloco in assistente["content"])
+    assert resultado["role"] == "user"
+    assert "toolResult" in resultado["content"][0]
+    assert segunda["toolConfig"] == primeira["toolConfig"]
+
+
+def test_historico_comeca_pelo_morador_e_alterna_mesmo_depois_de_falha():
+    modo_do_modelo("fora")
+    conversa_id = chat("primeira mensagem").json()["conversa_id"]
+    modo_do_modelo("normal")
+    requests.delete(f"{MODELO}/_requisicoes", timeout=5)
+    chat("segunda mensagem", conversa_id=conversa_id)
+    papeis = [m["role"] for m in requests.get(f"{MODELO}/_requisicoes", timeout=5).json()[0]["messages"]]
+
+    assert papeis == ["user", "assistant", "user"]
+
+
+def test_conversa_de_outro_id_nao_mistura():
+    chat("mensagem da conversa um")
+    requests.delete(f"{MODELO}/_requisicoes", timeout=5)
+    chat("mensagem da conversa dois")
+    mensagens = requests.get(f"{MODELO}/_requisicoes", timeout=5).json()[0]["messages"]
+    assert len(mensagens) == 1
+
+
+def test_mensagem_vazia_ou_gigante_e_recusada_sem_chamar_o_modelo():
+    assert chat("").status_code == 422
+    assert chat("x" * 2001).status_code == 422
+    assert requests.get(f"{MODELO}/_requisicoes", timeout=5).json() == []

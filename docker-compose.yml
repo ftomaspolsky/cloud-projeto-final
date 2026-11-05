@@ -1,14 +1,19 @@
-# Ambiente local: os dois serviços + MySQL + um SQS local (ElasticMQ).
+# Ambiente local: os dois serviços + MySQL + um SQS local (ElasticMQ) + um Bedrock simulado.
 # Serve para desenvolver sem AWS. A topologia é a mesma que vai para o ECS.
 #   cp .env.example .env
 #   docker compose up --build
+#   docker compose --profile teste run --rm --build testes
 
 x-aws-local: &aws-local
   AWS_REGION: us-east-2
-  AWS_ACCESS_KEY_ID: local          # o ElasticMQ não confere credencial
+  AWS_ACCESS_KEY_ID: local          # os simulados não conferem credencial
   AWS_SECRET_ACCESS_KEY: local
   SQS_ENDPOINT_URL: http://elasticmq:9324
-  QUEUE_NAME: pedidos
+  QUEUE_NAME: eventos
+
+x-modelo: &modelo
+  BEDROCK_ENDPOINT_URL: http://bedrock-fake:9000
+  BEDROCK_MODEL_ID: us.anthropic.claude-haiku-5-5
 
 x-db: &db
   DB_HOST: mysql
@@ -18,7 +23,7 @@ x-db: &db
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4                # a mesma linha do RDS em Ohio
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -36,21 +41,42 @@ services:
     ports:
       - "9324:9324"
 
-  chat-service:
-    build: ./app/chat-service
+  bedrock-fake:
+    build: ./local/bedrock-fake
+
+  atendimento:
+    build: ./app/atendimento
     environment:
-      <<: [*aws-local]
+      <<: [*aws-local, *modelo, *db]
     ports:
       - "8000:8000"
     depends_on:
-      - elasticmq
+      mysql:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+      bedrock-fake:
+        condition: service_started
 
-  order-worker:
-    build: ./app/order-worker
+  operacoes:
+    build: ./app/operacoes
     environment:
       <<: [*aws-local, *db]
     depends_on:
       mysql:
         condition: service_healthy
       elasticmq:
+        condition: service_started
+
+  testes:
+    profiles: ["teste"]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    environment:
+      <<: [*aws-local, *modelo, *db]
+    depends_on:
+      atendimento:
+        condition: service_started
+      operacoes:
         condition: service_started
