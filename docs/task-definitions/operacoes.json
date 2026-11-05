@@ -1,0 +1,52 @@
+{
+  "family": "cloud-projeto-final-operacoes",
+  "requiresCompatibilities": ["EC2"],
+  "networkMode": "bridge",
+  "executionRoleArn": "arn:aws:iam::116979769772:role/cloud-projeto-final-role-execucao",
+  "taskRoleArn": "arn:aws:iam::116979769772:role/cloud-projeto-final-role-app-operacoes",
+  "containerDefinitions": [
+    {
+      "name": "operacoes",
+      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/operacoes:v1",
+      "essential": true,
+      "cpu": 128,
+      "memoryReservation": 128,
+      "memory": 256,
+      "environment": [
+        { "name": "AWS_REGION", "value": "us-east-2" },
+        { "name": "QUEUE_NAME", "value": "cloud-projeto-final-eventos" },
+        { "name": "DB_HOST", "value": "cloud-projeto-final-db.cv9czqvj0wwr.us-east-2.rds.amazonaws.com" },
+        { "name": "DB_NAME", "value": "condominio" },
+        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" }
+      ],
+      "secrets": [
+        {
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl:username::"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl:password::"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/health')\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloud-projeto-final/operacoes",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "operacoes"
+        }
+      }
+    }
+  ],
+  "tags": [
+    { "key": "projeto", "value": "cloud-projeto-final" }
+  ]
+}

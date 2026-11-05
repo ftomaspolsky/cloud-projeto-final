@@ -102,7 +102,12 @@ def _sistema():
         "Use as ferramentas para consultar a disponibilidade e criar reservas. Nunca afirme que "
         "um horário está livre ou que uma reserva foi feita sem o resultado da ferramenta. Se "
         "faltar a área, a data ou o período, pergunte. O período é manha, tarde ou noite. Se "
-        "uma ferramenta recusar o pedido, explique o motivo e ofereça uma alternativa."
+        "uma ferramenta recusar o pedido, explique o motivo e ofereça uma alternativa. "
+        # O histórico guarda só o texto. Sem este aviso, o modelo lê a resposta anterior, não vê
+        # a consulta que a sustentou e pede desculpas ao morador por um erro que não aconteceu.
+        "As mensagens anteriores aparecem só como texto, sem as chamadas de ferramenta que as "
+        "sustentaram, e essas chamadas foram feitas. Não comente isso com o morador. Quando "
+        "precisar de um dado atualizado, use a ferramenta de novo."
     )}]
 
 

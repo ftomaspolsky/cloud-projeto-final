@@ -12,25 +12,34 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 
 **Estado (05/11):**
 
-- **Infraestrutura em Ohio:** toda de pé desde 30/10. Rede, security groups, RDS Multi-AZ, SQS com
-  DLQ, ECR, 4 roles IAM, grupos de log, target group, ALB, Launch Template, ASG, cluster ECS e
-  Capacity Provider. Lista com IDs em [docs/recursos-ohio.md](docs/recursos-ohio.md). A conta não
-  foi consultada de novo depois disso, fora o Bedrock e a role abaixo.
-- **Modelo:** Claude Haiku 5.5, testado no Playground de Ohio e de São Paulo. A role do
-  `atendimento` já tem a política `invocar-haiku`.
-- **Aplicação:** escrita e testada **só localmente**, com 28 testes passando, com MySQL e fila em
-  containers e o modelo **simulado**. Nada foi publicado: o ALB continua respondendo 503.
+- **A aplicação está no ar em Ohio:**
+  `http://cloud-projeto-final-alb-1611305876.us-east-2.elb.amazonaws.com`, com 2 tasks do
+  `atendimento` e 1 do `operacoes`. Lista com IDs em [docs/recursos-ohio.md](docs/recursos-ohio.md).
+- **Jornada real provada:** da conversa com o Haiku 5.5 à reserva gravada no RDS e à cobrança pelo
+  `operacoes`, com o mesmo `correlation_id` nos dois logs.
+- **Troca de versão:** da `v1` para a `v2`, 90 chamadas a `/health` em 3 minutos, todas com 200.
+- **Testes locais:** 28 passando, com MySQL e fila em containers e o modelo simulado.
 
-**Onde paramos / próximo passo (publicar):**
+**Onde paramos / próximo passo:**
 
-1. Levar o código ao **CloudShell**, e lá fazer `docker build` + `docker push` para os dois
-   repositórios do ECR.
-2. Task definitions (ver abaixo).
-3. Serviços ECS: `atendimento` ligado ao target group `cloud-projeto-final-tg-atend`;
-   `operacoes` sem load balancer.
-4. Conferir os três itens que só a AWS prova, em [Riscos conhecidos](docs/arquitetura.md#riscos-conhecidos).
-5. Escala das tasks, alarmes do CloudWatch e as demos de falha.
-6. Diagrama e etapa 2.
+1. Escala das tasks por métrica, e a escala das instâncias sob carga. Com as reservas atuais, cabem
+   cerca de 7 tasks por instância, então a demo precisa de reservas maiores ou de mais tasks.
+2. Medir o consumo real, para ajustar CPU e memória das task definitions.
+3. Alarmes do CloudWatch.
+4. As demos de falha: task, instância, modelo, fila e banco.
+5. Diagrama.
+6. Etapa 2, em São Paulo, com Terraform, escrito pelo agente e rodado pelo autor.
+
+**Para publicar uma versão nova do código:**
+
+1. No PC: `python scripts/gerar-zip.py`, que grava `../cloud-projeto-final.zip`, sem o `.env`.
+2. No CloudShell: apagar o `.zip` antigo, enviar o novo por **Ações → Carregar arquivo** e extrair em
+   `~/projeto`.
+3. `docker login` no ECR, `docker build` e `docker push` com uma tag nova (`v3`, …).
+4. Trocar a tag em `docs/task-definitions/<serviço>.json`, depois `aws ecs register-task-definition
+   --cli-input-json file://…` e `aws ecs update-service --task-definition <família>:<revisão>`.
+
+Hoje rodam `atendimento:v2` (revisão 2) e `operacoes:v1` (revisão 1).
 
 ## Arquitetura
 
@@ -99,7 +108,8 @@ app/atendimento/    serviço síncrono: rotas, Bedrock, regras da reserva, pági
 app/operacoes/      consumidor da fila
 local/              os simulados: SQS (ElasticMQ) e Bedrock
 tests/              testes do fluxo inteiro, em containers
-docs/               arquitetura, recursos criados em Ohio, passos no console
+docs/               arquitetura, recursos criados em Ohio, task definitions, passos no console
+scripts/            o .zip que vai para o CloudShell
 infra/terraform/    etapa 2 (São Paulo)
 ```
 

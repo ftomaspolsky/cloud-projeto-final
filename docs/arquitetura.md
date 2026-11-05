@@ -108,8 +108,9 @@ para o log, porque é dado do morador. Cada chamada ao modelo registra tokens e 
 | Risco | Efeito | O que fazer |
 |---|---|---|
 | **O RDS rotaciona a senha** do segredo, e o ECS só a injeta quando a task sobe | depois da rotação, as tasks antigas perdem o acesso ao banco até serem recriadas | o agendamento e o comportamento real não foram conferidos. Se acontecer: forçar uma nova implantação do serviço |
-| **A política `invocar-haiku` e a chamada ao Bedrock real** nunca rodaram de dentro de uma task | pode dar `AccessDenied`. O sintoma é o menu guiado, com `modelo_falhou` no log | é a primeira coisa a conferir no primeiro deploy |
-| **TLS até o RDS** não é testável localmente | a conexão pode falhar na AWS. O certificado foi conferido, e a conexão real não | conferir no primeiro deploy, pelo log `banco pronto` |
+| **O histórico guarda só o texto**, sem as chamadas de ferramenta | na segunda mensagem, o modelo pode não ver a consulta anterior. Antes da `v2`, ele chegou a pedir desculpas por uma consulta que tinha feito | a `v2` avisa isso no prompt, e a falsa confissão não voltou na única conversa testada. Se voltar, o conserto é guardar as chamadas no histórico |
+
+Provados na AWS em 05/11: a política `invocar-haiku` e a chamada Converse, o Haiku escolhendo as ferramentas, e o TLS até o RDS.
 
 ## Decisões pendentes
 

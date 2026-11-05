@@ -1,0 +1,49 @@
+{
+  "family": "cloud-projeto-final-atendimento",
+  "requiresCompatibilities": ["EC2"],
+  "networkMode": "bridge",
+  "executionRoleArn": "arn:aws:iam::116979769772:role/cloud-projeto-final-role-execucao",
+  "taskRoleArn": "arn:aws:iam::116979769772:role/cloud-projeto-final-role-app-atendimento",
+  "containerDefinitions": [
+    {
+      "name": "atendimento",
+      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/atendimento:v2",
+      "essential": true,
+      "cpu": 256,
+      "memoryReservation": 256,
+      "memory": 512,
+      "portMappings": [
+        { "containerPort": 8000, "hostPort": 0, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "AWS_REGION", "value": "us-east-2" },
+        { "name": "QUEUE_NAME", "value": "cloud-projeto-final-eventos" },
+        { "name": "BEDROCK_MODEL_ID", "value": "us.anthropic.claude-haiku-5-5" },
+        { "name": "DB_HOST", "value": "cloud-projeto-final-db.cv9czqvj0wwr.us-east-2.rds.amazonaws.com" },
+        { "name": "DB_NAME", "value": "condominio" },
+        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" }
+      ],
+      "secrets": [
+        {
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl:username::"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl:password::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloud-projeto-final/atendimento",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "atendimento"
+        }
+      }
+    }
+  ],
+  "tags": [
+    { "key": "projeto", "value": "cloud-projeto-final" }
+  ]
+}
