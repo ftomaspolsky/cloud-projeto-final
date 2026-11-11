@@ -1,0 +1,33 @@
+Demo 5: fila fora do ar para quem publica. A política em linha publicar-eventos
+(sqs:GetQueueUrl + sqs:SendMessage) foi retirada da role cloud-projeto-final-role-app-atendimento.
+Saída do CloudShell em 2026-11-11 (UTC), colada pelo autor.
+
+Antes: política salva em ~/publicar-eventos.json no CloudShell (344 bytes).
+correlation_id da demo, mandado no cabeçalho X-Correlation-Id: demo5-fila-144335
+
+14:43:36 permissão retirada, espera de 60 s
+14:44:36 POST /menu/reservas {"area":"Quadra","data":"2026-12-20","periodo":"manha"}
+         -> {"reserva_id":3,"area":"Quadra","data":"2026-12-20","periodo":"manha","taxa":"30.00"} | HTTP 201
+
+Log do atendimento com esse correlation_id:
+{"ts": "2026-11-11T14:44:36", "nivel": "INFO", ..., "msg": "reserva gravada", "reserva_id": 3, "lancamento_id": 3}
+{"ts": "2026-11-11T14:44:36", "nivel": "ERROR", ..., "msg": "falha ao publicar eventos", "erro": "An error occurred (AWS.SimpleQueueService.NonExistentQueue) when calling the GetQueueUrl operation: Th...
+{"ts": "2026-11-11T14:44:36", "nivel": "INFO", ..., "msg": "requisicao", "metodo": "POST", "rota": "/menu/reservas", "status": 201, "ms": 133.0}
+
+O SQS respondeu "fila inexistente", e não "acesso negado": a fila existe, a causa é a permissão retirada.
+
+Alarme cloud-projeto-final-erros-atendimento:
+14:44:58 OK ... 14:46:01 OK
+14:46:22 ALARM
+
+Linhas "falha ao publicar eventos" de 14:44 até a volta da permissão: 44
+(as 2 tasks tentam a cada 10 s enquanto o evento segue em evento_saida).
+
+14:48:19 permissão recolocada (iam put-role-policy com o arquivo salvo)
+operacoes: {"ts": "2026-11-11T14:48:42", "nivel": "INFO", "servico": "operacoes", "msg": "evento processado", "evento_id": "df17b9b6-74f9-4499-9232-b2ed66e091ad", "correlation_id": "demo5-fila-144335"}
+atendimento: {"ts": "2026-11-11T14:48:42", "nivel": "INFO", "servico": "atendimento", "correlation_id": "-", "msg": "evento publicado", "evento_id": "df17b9b6-74f9-4499-9232-b2ed66e091ad"}
+
+A linha "evento publicado" sai com correlation_id "-": o publicador roda numa thread sem a
+requisição. O correlation_id viaja no atributo da mensagem, e o operacoes o recebeu certo.
+
+Alarme: ALARM de 14:48:55 a 14:54:07, OK às 14:54:28.

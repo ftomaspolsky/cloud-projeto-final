@@ -1,0 +1,30 @@
+Demo 1 de falha repetida na v3 (uvicorn com --timeout-keep-alive 65): uma task do atendimento parada com aws ecs stop-task, com /health sob ~2 req/s.
+Saída do CloudShell em 2026-11-10 (UTC), colada pelo autor.
+
+14:30:25 parando a task 0a84324873b047dd83a2e2cca08139d6
+
+rodando/pendente | target group
+14:30:27  1 0 | healthy healthy
+14:30:39  1 0 | healthy healthy
+14:30:51  1 0 | healthy healthy
+14:31:03  1 0 | draining healthy
+14:31:14  1 1 | draining healthy
+14:31:26  1 1 | draining healthy healthy
+14:31:38  2 0 | healthy healthy
+14:31:49  2 0 | healthy healthy
+14:32:01  2 0 | healthy healthy
+14:32:13  2 0 | healthy healthy
+14:32:25  2 0 | healthy healthy
+14:32:36  2 0 | healthy healthy
+
+Demo: 480 respostas 200, nenhuma diferente de 200.
+Troca v2 -> v3, trecho com só a v3 no ar (depois de 14:24:14): 459 respostas 200, nenhuma diferente de 200.
+
+Eventos do serviço:
+14:31:03.141  has started 1 tasks: (task 82dc859d6f2d4a81bb8d742b5c0e3a02)
+14:31:22.502  registered 1 targets in target group cloud-projeto-final-tg-atend
+14:31:31.692  has reached a steady state
+
+Comparação com a v2, no mesmo teste e na parte da troca que ainda tinha tasks v2:
+v2: 4 respostas 502 em 743 requisições (479 da demo 1 + 264 da troca).
+v3: 0 respostas 502 em 939 requisições (480 da demo + 459 da troca).

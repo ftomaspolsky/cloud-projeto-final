@@ -10,7 +10,7 @@ generativa que consulta dados reais e registra pedidos. O que se avalia é a arq
 digital, consulta a disponibilidade e reserva a área comum com taxa. Ordem de serviço, visitante,
 encomendas, cota e o login liberado por um admin ficam para depois.
 
-**Estado (05/11):**
+**Estado (05/11), ainda valendo:**
 
 - **A aplicação está no ar em Ohio:**
   `http://cloud-projeto-final-alb-1611305876.us-east-2.elb.amazonaws.com`, com 2 tasks do
@@ -20,15 +20,66 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **Troca de versão:** da `v1` para a `v2`, 90 chamadas a `/health` em 3 minutos, todas com 200.
 - **Testes locais:** 28 passando, com MySQL e fila em containers e o modelo simulado.
 
-**Onde paramos / próximo passo:**
+**Estado (06/11), horários em UTC, o relógio do CloudShell (Brasília = UTC − 3):**
 
-1. Escala das tasks por métrica, e a escala das instâncias sob carga. Com as reservas atuais, cabem
-   cerca de 7 tasks por instância, então a demo precisa de reservas maiores ou de mais tasks.
-2. Medir o consumo real, para ajustar CPU e memória das task definitions.
-3. Alarmes do CloudWatch.
-4. As demos de falha: task, instância, modelo, fila e banco.
-5. Diagrama.
-6. Etapa 2, em São Paulo, com Terraform, escrito pelo agente e rodado pelo autor.
+- **Consumo medido em repouso, por task** (Container Insights; o valor por serviço é a média por
+  task): `atendimento` 59 MiB de 256 reservados e 15 de 256 unidades de CPU; `operacoes` 40 de 128
+  MiB e 4 de 128 unidades. As reservas ficaram como estavam: a folga é de 3 a 4 vezes.
+- **Cada `t3.small` oferece ao ECS 2048 unidades de CPU e 1913 MiB.** A memória limita: cabem 7
+  tasks do `atendimento` por instância. Com o `operacoes`, as 2 instâncias seguram 13.
+- **Escala em dois níveis provada** com `scripts/carga.py` (40 req/s no `/health`, 12 min): às 14:49:55
+  as tasks foram de 2 para 16, 13 rodaram e 3 ficaram sem lugar; às 14:51:29 o `ASG` foi a 3; às
+  14:53:03, 16 rodando em 3 instâncias. **28.820 requisições, todas 200.** Prints em
+  [docs/evidencias/](docs/evidencias/).
+- **Escala do `operacoes` pela fila provada** com `scripts/encher-fila.py` (28.860 cópias de um evento
+  já processado, 60/s por 8 min): 1 task processa ~30 mensagens/s, a fila chegou a 9205, às 15:14:22
+  subiram 4 tasks (~100/s juntas), a fila zerou às 15:17:33. **DLQ em 0 o tempo todo:** toda cópia
+  foi descartada como duplicada.
+- **Alarmes:** 12, todos em OK, avisando o tópico SNS `cloud-projeto-final-alertas` (e-mail do autor
+  confirmado). Criados por `scripts/alarmes.sh`.
+- **Armadilha vista:** com 3 instâncias em 2 AZs, o ECS tentou rebalancear as tasks por AZ e deixou
+  1 task pendente na AZ cheia (evento "AZ Rebalancing in progress", 15:08:01). Não derrubou nada, e o
+  `Capacity Provider` não contou essa task como falta de instância.
+
+**Estado (10/11), UTC.** Saídas em [docs/evidencias/](docs/evidencias/):
+
+- **Descida de 06/11 conferida:** voltou a 2 tasks do `atendimento`, 1 do `operacoes` e 2 instâncias.
+- **Task parada com `stop-task`, sob ~2 req/s:** o serviço não cai, e a contagem volta a 2 em ~1 min.
+- **`v3` no ar:** `--timeout-keep-alive 65` no `uvicorn`, acima dos 60 s de ociosidade do ALB. Os `502`
+  esporádicos foram de 4 em 743 (`v2`) para 0 em 939 (`v3`).
+- **Drenagem e substituição de instância:** 1516 requisições, todas 200.
+
+**Estado (11/11), UTC.** As demos de falha da etapa 1 estão feitas:
+
+- **Queda abrupta de instância** (encerrada sem drenagem, sob ~2 req/s): tudo de volta em ~1,5 min, o
+  ASG subiu a substituta em 22 s. **23 falhas em ~170 pedidos** (8 `502`, 15 sem resposta em 5 s),
+  na janela de ~20 s em que o ALB ainda mandava tráfego para a task morta. Na drenagem planejada, 0.
+- **Modelo fora do ar** (política `invocar-haiku` retirada): 10 de 10 mensagens caíram no menu, o
+  alarme `erros-atendimento` acendeu em ~1,5 min, o log mostrou `AccessDeniedException`, e tudo voltou
+  com a política recolocada.
+- **Fila fora do ar** (política `publicar-eventos` retirada): a reserva foi confirmada na hora (201), o
+  evento ficou na caixa de saída, e saiu sozinho 23 s depois da volta da permissão. A cobrança do
+  `operacoes` tem o mesmo `correlation_id` (`demo5-fila-144335`). O SQS respondeu `NonExistentQueue`,
+  não "acesso negado": a fila existe.
+- **Banco fora do ar** (failover forçado do RDS Multi-AZ): 5 leituras com `503` em ~13 s, 211 com 200,
+  a aplicação voltou sozinha, e o primário passou para `us-east-2b`.
+- **Rebalanceamento por zona do ECS está ligado:** depois de uma substituição, o serviço volta a ter
+  uma task por zona sozinho, uns 12 min depois de a instância nova entrar no cluster.
+
+**Onde paramos (11/11, ~15:05 UTC):** nada pendente na conta. As duas políticas foram recolocadas,
+as tasks estão uma por zona, há 2 instâncias, e os alarmes estão em OK.
+
+**Próximo passo:**
+
+1. Diagrama da arquitetura.
+2. Etapa 2, em São Paulo, com Terraform, escrito pelo agente e rodado pelo autor.
+3. Antes de apresentar: **apagar as reservas de teste** (12/12, 13/12 e 20/12). A unidade de demo está
+   no limite de 3 reservas futuras e recusa qualquer reserva nova com `limite_da_unidade`.
+4. Pequena correção para uma `v4`: a linha `evento publicado` sai com `correlation_id` `-`, porque o
+   publicador roda fora da requisição. O `correlation_id` da mensagem está certo.
+
+**Colar no CloudShell:** ele às vezes come o primeiro caractere de um bloco colado. Blocos longos
+começam por uma linha de comentário.
 
 **Para publicar uma versão nova do código:**
 
@@ -39,7 +90,7 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 4. Trocar a tag em `docs/task-definitions/<serviço>.json`, depois `aws ecs register-task-definition
    --cli-input-json file://…` e `aws ecs update-service --task-definition <família>:<revisão>`.
 
-Hoje rodam `atendimento:v2` (revisão 2) e `operacoes:v1` (revisão 1).
+Hoje rodam `atendimento:v3` (revisão 3) e `operacoes:v1` (revisão 1).
 
 ## Arquitetura
 

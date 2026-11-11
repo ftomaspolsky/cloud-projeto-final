@@ -7,7 +7,7 @@
   "containerDefinitions": [
     {
       "name": "atendimento",
-      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/atendimento:v2",
+      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/atendimento:v3",
       "essential": true,
       "cpu": 256,
       "memoryReservation": 256,

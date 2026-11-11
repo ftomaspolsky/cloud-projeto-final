@@ -1,0 +1,37 @@
+Demo 6: banco fora do ar. Failover forçado do RDS Multi-AZ (reboot-db-instance --force-failover),
+com uma leitura do banco (GET /menu/areas) a cada 2 s pelo ALB.
+Saída do CloudShell em 2026-11-11 (UTC), colada pelo autor.
+
+antes: available  us-east-2a  us-east-2b  True   (estado, primário, cópia em espera, Multi-AZ)
+antes do failover: 5 leituras 200
+14:56:55 failover pedido: rebooting
+
+hora | RDS | zona do primario | ultimas 5 leituras | alarme erros-atendimento
+14:57:18 | rebooting us-east-2a | 200 200 200 200 200 | OK
+14:57:40 | rebooting us-east-2a | 200 200 200 200 200 | OK
+14:58:02 | rebooting us-east-2a | 200 200 200 200 200 | OK
+14:58:23 | rebooting us-east-2a | 503 503 503 503 503 | OK
+14:58:45 | rebooting us-east-2a | 200 200 200 200 200 | OK
+14:59:07 | available us-east-2a | 200 200 200 200 200 | OK
+14:59:29 | available us-east-2a | 200 200 200 200 200 | ALARM
+15:00:13 | available us-east-2a | 200 200 200 200 200 | ALARM
+15:00:35 | available us-east-2b | 200 200 200 200 200 | ALARM
+...
+15:03:51 | available us-east-2b | 200 200 200 200 200 | ALARM
+15:04:13 | available us-east-2b | 200 200 200 200 200 | OK
+
+Leituras por código: 211 com 200, 5 com 503.
+Primeira e última falha: 14:58:09 503 ... 14:58:22 503
+
+Eventos do RDS:
+14:58:10.120  Multi-AZ instance failover started.
+14:58:26.050  DB instance restarted
+14:58:43.160  DB instance restarted
+14:58:52.653  Multi-AZ instance failover completed
+14:58:52.653  The user requested a failover of the DB instance.
+
+Observações:
+- O failover só começou 1 min 15 s depois do pedido; a janela sem banco, vista pela aplicação, foi de ~13 s.
+- O describe-db-instances seguiu mostrando us-east-2a como primário até ~15:00:13, 1 min 20 s
+  depois de o RDS registrar o failover como concluído.
+- Ninguém reiniciou a aplicação: cada requisição abre conexão nova e voltou sozinha.

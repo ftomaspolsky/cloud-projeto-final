@@ -1,0 +1,22 @@
+Troca do atendimento da revisão 2 (v2) para a 3 (v3, uvicorn com --timeout-keep-alive 65), com /health sob ~2 req/s.
+Saída do CloudShell em 2026-11-10 (UTC), colada pelo autor.
+
+Imagem: atendimento:v3, digest sha256:0510a32205d77a235c8c50bad28818ff5d452cbf4fb6b8ac8ff9c9fbfecb0180
+Ociosidade do ALB (idle_timeout.timeout_seconds): 60
+
+Colunas: revisão, desejado, rodando, estado
+14:22:32 rev 3 0 0 IN_PROGRESS; rev 2 2 2 COMPLETED
+14:22:58 rev 3 2 0 IN_PROGRESS; rev 2 2 2 COMPLETED
+14:23:23 rev 3 2 2 IN_PROGRESS; rev 2 2 2 COMPLETED
+14:23:36 rev 3 2 2 IN_PROGRESS; rev 2 1 2 COMPLETED
+14:23:49 rev 3 2 2 IN_PROGRESS; rev 2 0 2 COMPLETED
+14:24:01 rev 3 2 2 IN_PROGRESS; rev 2 0 1 COMPLETED
+14:24:14 rev 3 2 2 IN_PROGRESS; rev 2 0 0 COMPLETED
+14:25:05 rev 3 2 2 COMPLETED
+
+Respostas por código: 721 com 200, 2 com 502
+Diferentes de 200 (as duas com só tasks da rev 2 rodando):
+14:22:58 502
+14:23:01 502
+
+No fim: task-definition/cloud-projeto-final-atendimento:3, 2 desejadas, 2 rodando, COMPLETED

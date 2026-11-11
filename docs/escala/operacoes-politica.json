@@ -1,0 +1,42 @@
+{
+  "TargetValue": 100,
+  "ScaleOutCooldown": 60,
+  "ScaleInCooldown": 300,
+  "CustomizedMetricSpecification": {
+    "Metrics": [
+      {
+        "Id": "fila",
+        "MetricStat": {
+          "Metric": {
+            "Namespace": "AWS/SQS",
+            "MetricName": "ApproximateNumberOfMessagesVisible",
+            "Dimensions": [{ "Name": "QueueName", "Value": "cloud-projeto-final-eventos" }]
+          },
+          "Stat": "Sum"
+        },
+        "ReturnData": false
+      },
+      {
+        "Id": "tasks",
+        "MetricStat": {
+          "Metric": {
+            "Namespace": "ECS/ContainerInsights",
+            "MetricName": "RunningTaskCount",
+            "Dimensions": [
+              { "Name": "ClusterName", "Value": "cloud-projeto-final-cluster" },
+              { "Name": "ServiceName", "Value": "operacoes" }
+            ]
+          },
+          "Stat": "Average"
+        },
+        "ReturnData": false
+      },
+      {
+        "Id": "porTask",
+        "Expression": "fila / tasks",
+        "Label": "mensagens na fila por task",
+        "ReturnData": true
+      }
+    ]
+  }
+}

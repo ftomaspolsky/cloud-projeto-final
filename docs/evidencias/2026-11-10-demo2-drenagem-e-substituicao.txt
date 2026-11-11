@@ -1,0 +1,39 @@
+Demo 2: drenagem planejada de uma instância, encerramento e substituição pelo ASG, com /health sob ~2 req/s.
+Saída do CloudShell em 2026-11-10 (UTC), colada pelo autor. Tasks do atendimento na v3.
+
+14:37:07 instância escolhida: i-052a6a410fef6f863
+14:37:22 drenando (update-container-instances-state --status DRAINING)
+
+Tasks na instância drenando | serviços (rodando, pendente)
+14:37:24  2 | atendimento 2 0; operacoes 1 0
+14:37:36  2 | atendimento 2 0; operacoes 1 0
+14:37:47  2 | atendimento 2 1; operacoes 1 0
+14:37:58  2 | atendimento 2 1; operacoes 2 0
+14:38:10  2 | atendimento 3 0; operacoes 2 0
+14:38:21  2 | atendimento 3 0; operacoes 2 0
+14:38:32  2 | atendimento 3 0; operacoes 2 0
+14:38:44  2 | atendimento 3 0; operacoes 2 0
+14:38:55  1 | atendimento 2 0; operacoes 2 0
+14:39:07  0 | atendimento 2 0; operacoes 1 0
+
+14:39:07 instância vazia, encerrada com ec2 terminate-instances (shutting-down)
+
+ASG | ativas no cluster
+14:39:09  i-00403475975cc8260 InService; i-052a6a410fef6f863 InService | 1
+14:41:04  i-00403475975cc8260 InService; i-052a6a410fef6f863 InService | 1
+14:41:20  i-00403475975cc8260 InService; i-0762f4279081cf51c InService | 1
+14:41:37  i-00403475975cc8260 InService; i-0762f4279081cf51c InService | 1
+14:41:53  i-00403475975cc8260 InService; i-0762f4279081cf51c InService | 2
+14:45:26  i-00403475975cc8260 InService; i-0762f4279081cf51c InService | 2
+
+Respostas por código: 1516 com 200, nenhuma diferente de 200.
+
+No fim: atendimento 2 2 0; operacoes 1 1 0
+
+Atividades do ASG:
+14:41:11.107  Successful  Terminating EC2 instance: i-052a6a410fef6f863
+14:41:12.819  Successful  Launching a new EC2 instance: i-0762f4279081cf51c
+
+Mudanças de alarme desde 14:37: nenhuma.
+O ASG seguiu contando a instância encerrada como InService por cerca de 2 min, por isso o
+GroupInServiceInstances não caiu e o alarme asg-abaixo-do-minimo não tinha como acender.

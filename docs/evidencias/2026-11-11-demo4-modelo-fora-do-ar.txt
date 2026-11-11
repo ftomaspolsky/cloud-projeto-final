@@ -1,0 +1,26 @@
+Demo 4: modelo fora do ar. A política em linha invocar-haiku foi retirada da role
+cloud-projeto-final-role-app-atendimento, e o Bedrock passou a recusar a chamada.
+Saída do CloudShell em 2026-11-11 (UTC), colada pelo autor.
+
+Antes: política salva em ~/invocar-haiku.json no CloudShell (990 bytes), com get-role-policy.
+
+14:32:38 permissão retirada (iam delete-role-policy), espera de 60 s
+10 mensagens "O salao de festas esta livre no dia 20/12 a noite?" pelo POST /chat, de 14:33:38 a 14:34:25:
+as 10 responderam "Não consegui processar sua mensagem agora, mas ela ficou registrada. Você pode
+fazer a reserva pelo menu..." (o texto do caminho do menu), nenhuma com erro HTTP.
+
+Alarme cloud-projeto-final-erros-atendimento (mais de 5 linhas ERROR em 5 min):
+14:34:31 OK
+14:34:52 OK
+14:35:13 ALARM
+
+Diagnóstico pelo log (/ecs/cloud-projeto-final/atendimento, filtro nivel = ERROR, desde 14:32): 10 linhas.
+{"ts": "2026-11-11T14:33:39", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "69e84479-71cd-465d-99fd-a1992e606e80", "msg": "modelo_falhou", "erro_codigo": "AccessDeniedException", "rodada": 0}
+{"ts": "2026-11-11T14:33:44", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "89fe6e90-f500-401b-a92c-d74b8fe86e5b", "msg": "modelo_falhou", "erro_codigo": "AccessDeniedExcepti...
+
+14:37:49 permissão recolocada (iam put-role-policy com o arquivo salvo), espera de 60 s
+14:38:52 ia | Sim, o salão de festas está livre no dia 20/12/2026 à noite. A taxa da reserva é R$ 150,00.
+              Quer que eu faça a reserva para esse período?
+
+14:38:53 ALARM
+14:39:13 OK

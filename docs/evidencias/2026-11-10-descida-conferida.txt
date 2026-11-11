@@ -1,0 +1,20 @@
+Conferência da descida depois da demo de escala de 06/11.
+Saída do CloudShell em 2026-11-10, 14:04:35 UTC, colada pelo autor. Só leitura.
+
+== 1. servicos: nome, desejado, rodando, pendente
+atendimento  2  2  0
+operacoes    1  1  0
+
+== 2. instancias do ASG
+i-00403475975cc8260  us-east-2a  InService  Healthy
+i-052a6a410fef6f863  us-east-2b  InService  Healthy
+
+== 3. ultimas entradas e saidas de instancia
+2026-11-06T15:53:47.791000+00:00  Successful  Terminating EC2 instance: i-06688729612a0ef55
+2026-11-06T15:53:36.845000+00:00  Cancelled   Could not scale to desired capacity because all remaining instances are protected from scale-in.
+2026-11-06T14:51:26.947000+00:00  Successful  Launching a new EC2 instance: i-06688729612a0ef55
+2026-10-30T20:43:47.267000+00:00  Successful  Launching a new EC2 instance: i-00403475975cc8260
+2026-10-30T20:43:47.247000+00:00  Successful  Launching a new EC2 instance: i-052a6a410fef6f863
+
+== 4. alarmes fora de OK
+(nenhum)

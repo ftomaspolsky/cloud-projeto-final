@@ -1,0 +1,39 @@
+Demo 1 de falha: uma task do atendimento parada com aws ecs stop-task, com /health sob ~2 req/s.
+Saída do CloudShell em 2026-11-10 (UTC), colada pelo autor.
+
+14:08:19 parando a task 3415bf436f1c4c7f9985a9bf125cb1df
+
+rodando/pendente | target group
+14:08:21  1 0 | healthy healthy
+14:08:33  1 0 | healthy healthy
+14:08:45  1 0 | healthy healthy
+14:08:57  1 1 | healthy draining
+14:09:09  2 0 | healthy healthy draining
+14:09:20  2 0 | healthy healthy draining
+14:09:32  2 0 | healthy healthy
+14:09:44  2 0 | healthy healthy
+14:09:55  2 0 | healthy healthy
+14:10:07  2 0 | healthy healthy
+14:10:19  2 0 | healthy healthy
+14:10:30  2 0 | healthy healthy
+
+Respostas por código: 477 com 200, 2 com 502
+Diferentes de 200:
+14:08:50 502
+14:10:10 502
+
+Eventos do serviço:
+14:08:51.575  has started 1 tasks: (task d16a7bfe050b4dcb880c151cbdf2b1cc)
+14:09:01.478  registered 1 targets in target group cloud-projeto-final-tg-atend
+14:09:11.369  has reached a steady state
+
+Diagnóstico da task parada 3415bf436f1c4c7f9985a9bf125cb1df (describe-tasks e log):
+stoppingAt          14:08:19.927
+executionStoppedAt  14:09:57.803
+stoppedAt           14:10:01.788
+stopCode            UserInitiated
+exitCode            0
+
+Último GET /health vindo do ALB nessa task: 14:08:51 (depois disso, só o health check local, 127.0.0.1)
+14:09:57 Shutting down
+14:09:57 Finished server process [1]
