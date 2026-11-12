@@ -7,7 +7,7 @@
   "containerDefinitions": [
     {
       "name": "atendimento",
-      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/atendimento:v3",
+      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/atendimento:v4",
       "essential": true,
       "cpu": 256,
       "memoryReservation": 256,
@@ -21,7 +21,8 @@
         { "name": "BEDROCK_MODEL_ID", "value": "us.anthropic.claude-haiku-5-5" },
         { "name": "DB_HOST", "value": "cloud-projeto-final-db.cv9czqvj0wwr.us-east-2.rds.amazonaws.com" },
         { "name": "DB_NAME", "value": "condominio" },
-        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" }
+        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" },
+        { "name": "DB_SECRET_ARN", "value": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl" }
       ],
       "secrets": [
         {

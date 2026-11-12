@@ -77,6 +77,37 @@ FERRAMENTAS = {
                 },
             }
         },
+        {
+            "toolSpec": {
+                "name": "listar_minhas_reservas",
+                "description": (
+                    "Lista as reservas ativas do morador, de hoje em diante, com o número de cada "
+                    "uma, e o limite de reservas futuras da unidade."
+                ),
+                "inputSchema": {
+                    "json": {"type": "object", "properties": {}, "additionalProperties": False}
+                },
+            }
+        },
+        {
+            "toolSpec": {
+                "name": "cancelar_reserva",
+                "description": (
+                    "Cancela uma reserva do morador pelo número e cancela a taxa. Use só depois "
+                    "de o morador confirmar qual reserva quer cancelar."
+                ),
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": {
+                            "reserva_id": {"type": "integer", "description": "Número da reserva."},
+                        },
+                        "required": ["reserva_id"],
+                        "additionalProperties": False,
+                    }
+                },
+            }
+        },
     ]
 }
 
@@ -99,10 +130,13 @@ def _sistema():
         "Você é o atendente virtual de um condomínio e fala com um morador pelo chat. Responda "
         "sempre em português do Brasil, em mensagens curtas. "
         f"Hoje é {reservas.hoje().isoformat()}. "
-        "Use as ferramentas para consultar a disponibilidade e criar reservas. Nunca afirme que "
-        "um horário está livre ou que uma reserva foi feita sem o resultado da ferramenta. Se "
-        "faltar a área, a data ou o período, pergunte. O período é manha, tarde ou noite. Se "
-        "uma ferramenta recusar o pedido, explique o motivo e ofereça uma alternativa. "
+        "As áreas são Salão de festas, Churrasqueira e Quadra. Use as ferramentas para consultar "
+        "a disponibilidade, criar reservas, listar as reservas do morador e cancelar. Nunca "
+        "afirme que um horário está livre, que uma reserva foi feita ou cancelada sem o "
+        "resultado da ferramenta. Se faltar a área, a data ou o período, pergunte. O período é "
+        "manha, tarde ou noite. Antes de cancelar, confirme com o morador qual reserva, pelo "
+        "número, área e data. Se uma ferramenta recusar o pedido, explique o motivo em palavras "
+        "simples e ofereça uma alternativa. Escreva datas como DD/MM/AAAA para o morador. "
         # O histórico guarda só o texto. Sem este aviso, o modelo lê a resposta anterior, não vê
         # a consulta que a sustentou e pede desculpas ao morador por um erro que não aconteceu.
         "As mensagens anteriores aparecem só como texto, sem as chamadas de ferramenta que as "
@@ -121,6 +155,10 @@ def _executar(nome, entrada, morador_id):
                 entrada["area"], entrada["data"], entrada["periodo"], morador_id
             )
             return resultado, True
+        if nome == "listar_minhas_reservas":
+            return reservas.listar_minhas_reservas(morador_id), True
+        if nome == "cancelar_reserva":
+            return reservas.cancelar_reserva(entrada["reserva_id"], morador_id), True
         return {"erro": "ferramenta_inexistente"}, False
     except KeyError as erro:
         return {"erro": f"campo_faltando: {erro}"}, False
@@ -131,18 +169,23 @@ def _executar(nome, entrada, morador_id):
         return {"erro": "sistema_indisponivel"}, False
 
 
-def _confirmacao(reserva):
+def _confirmacao(acao):
+    if acao.get("cancelada"):
+        return (
+            f"Sua reserva {acao['reserva_id']} foi cancelada: {acao['area']}, {acao['data']}, "
+            f"período {acao['periodo']}."
+        )
     return (
-        f"Sua reserva foi registrada: {reserva['area']}, {reserva['data']}, período "
-        f"{reserva['periodo']}, taxa de R$ {reserva['taxa']}."
+        f"Sua reserva foi registrada: {acao['area']}, {acao['data']}, período "
+        f"{acao['periodo']}, taxa de R$ {acao['taxa']}."
     )
 
 
-def _sem_modelo(reservas_feitas):
-    # Se a reserva já foi gravada, mandar para o menu faria o morador tentar de novo e ouvir
-    # "horário ocupado" pela própria reserva. Melhor confirmar o que aconteceu.
-    if reservas_feitas:
-        return Resposta(" ".join(_confirmacao(r) for r in reservas_feitas), IA)
+def _sem_modelo(acoes_feitas):
+    # Se a reserva já foi gravada (ou cancelada), mandar para o menu faria o morador repetir o
+    # pedido e ouvir "horário ocupado" pela própria reserva. Melhor confirmar o que aconteceu.
+    if acoes_feitas:
+        return Resposta(" ".join(_confirmacao(a) for a in acoes_feitas), IA)
     return Resposta(TEXTO_DO_MENU, MENU)
 
 
@@ -203,7 +246,7 @@ def responder(historico, morador_id):
                 continue
             pedido = bloco["toolUse"]
             resultado, deu_certo = _executar(pedido["name"], pedido["input"], morador_id)
-            if deu_certo and pedido["name"] == "criar_reserva":
+            if deu_certo and pedido["name"] in ("criar_reserva", "cancelar_reserva"):
                 reservas_feitas.append(resultado)
             registrar(logging.INFO, "ferramenta_executada", ferramenta=pedido["name"], ok=deu_certo)
             resultados.append({

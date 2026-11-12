@@ -184,6 +184,7 @@ locals {
     { name = "DB_HOST", value = aws_db_instance.principal.address },
     { name = "DB_NAME", value = aws_db_instance.principal.db_name },
     { name = "DB_SSL_CA", value = "/app/rds-ca.pem" },
+    { name = "DB_SECRET_ARN", value = local.segredo_db }, # para reler a senha depois da rotação
   ]
 
   segredos_db = [
@@ -303,6 +304,7 @@ resource "aws_ecs_service" "atendimento" {
     # Permissões das tasks: só saem depois que o serviço parou (ver o depends_on do ASG).
     aws_iam_role_policy_attachment.execucao_padrao, aws_iam_role_policy.execucao_segredo,
     aws_iam_role_policy.atendimento_fila, aws_iam_role_policy.atendimento_modelo, aws_iam_role_policy.operacoes_fila,
+    aws_iam_role_policy.app_le_segredo,
   ]
 }
 
@@ -343,5 +345,6 @@ resource "aws_ecs_service" "operacoes" {
     # Permissões das tasks: só saem depois que o serviço parou (ver o depends_on do ASG).
     aws_iam_role_policy_attachment.execucao_padrao, aws_iam_role_policy.execucao_segredo,
     aws_iam_role_policy.atendimento_fila, aws_iam_role_policy.atendimento_modelo, aws_iam_role_policy.operacoes_fila,
+    aws_iam_role_policy.app_le_segredo,
   ]
 }

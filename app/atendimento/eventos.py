@@ -57,7 +57,13 @@ def publicar_pendentes():
                     (evento["evento_id"],),
                 )
                 conexao.commit()
-                registrar(logging.INFO, "evento publicado", evento_id=evento["evento_id"])
+                # O id vem do evento: na nova tentativa a cada 10 s, não há requisição em volta.
+                registrar(
+                    logging.INFO,
+                    "evento publicado",
+                    evento_id=evento["evento_id"],
+                    correlation_id=evento["correlation_id"],
+                )
     except (pymysql.Error, BotoCoreError, ClientError) as erro:
         registrar(logging.ERROR, "falha ao publicar eventos", erro=str(erro))
 

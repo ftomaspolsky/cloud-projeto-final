@@ -310,7 +310,7 @@ def test_o_que_vai_para_o_modelo():
 
     assert primeira["modelo"] == os.environ["BEDROCK_MODEL_ID"]
     nomes = [f["toolSpec"]["name"] for f in primeira["toolConfig"]["tools"]]
-    assert nomes == ["consultar_disponibilidade", "criar_reserva"]
+    assert nomes == ["consultar_disponibilidade", "criar_reserva", "listar_minhas_reservas", "cancelar_reserva"]
     # O Haiku 5.5 recusa parâmetros de amostragem diferentes do padrão.
     assert set(primeira["inferenceConfig"]) == {"maxTokens"}
     # O morador não é decisão do modelo.
@@ -319,7 +319,7 @@ def test_o_que_vai_para_o_modelo():
         for f in primeira["toolConfig"]["tools"]
         for campo in f["toolSpec"]["inputSchema"]["json"]["properties"]
     }
-    assert campos == {"area", "data", "periodo"}
+    assert campos == {"area", "data", "periodo", "reserva_id"}
 
     # A mensagem do assistente volta intacta, com o raciocínio, junto com o resultado.
     assistente, resultado = segunda["messages"][-2:]
@@ -354,3 +354,141 @@ def test_mensagem_vazia_ou_gigante_e_recusada_sem_chamar_o_modelo():
     assert chat("").status_code == 422
     assert chat("x" * 2001).status_code == 422
     assert requests.get(f"{MODELO}/_requisicoes", timeout=5).json() == []
+
+
+# ---------------------------------------------------------------- v4: minhas reservas e cancelamento
+
+def reservar_pelo_menu(data=None, periodo="noite", area=SALAO):
+    resposta = requests.post(
+        f"{ATENDIMENTO}/menu/reservas",
+        json={"area": area, "data": data or data_futura(), "periodo": periodo},
+        timeout=10,
+    )
+    assert resposta.status_code == 201, resposta.text
+    return resposta.json()
+
+
+def status_do_lancamento(reserva_id):
+    return consulta("SELECT status FROM lancamento_financeiro WHERE reserva_id = %s", reserva_id)[0]["status"]
+
+
+def test_cancelar_libera_o_horario_e_estorna_a_cobranca():
+    data = data_futura()
+    reserva = reservar_pelo_menu(data)
+    assert esperar(lambda: status_do_lancamento(reserva["reserva_id"]) == "cobranca_gerada")
+
+    cancelada = requests.delete(f"{ATENDIMENTO}/menu/reservas/{reserva['reserva_id']}", timeout=10)
+    assert cancelada.status_code == 200
+    assert cancelada.json()["cancelada"] is True
+    # A reserva fica como histórico, só muda de status.
+    assert consulta("SELECT status FROM reserva WHERE id = %s", reserva["reserva_id"])[0]["status"] == "cancelada"
+
+    # O horário volta a ficar livre na hora.
+    livre = requests.get(f"{ATENDIMENTO}/menu/disponibilidade", params={"area": SALAO, "data": data}, timeout=10).json()
+    assert "noite" in livre["periodos_livres"]
+    nova = reservar_pelo_menu(data)
+    assert nova["reserva_id"] != reserva["reserva_id"]
+
+    # O operacoes cancela a cobrança da antiga, com estorno, e cobra a nova.
+    assert esperar(lambda: status_do_lancamento(reserva["reserva_id"]) == "cancelado")
+    assert esperar(lambda: status_do_lancamento(nova["reserva_id"]) == "cobranca_gerada")
+    assert consulta("SELECT 1 FROM notificacao WHERE texto LIKE %s", "%estorno%")
+    assert consultar_dlq() == []
+
+
+def test_minhas_reservas_mostra_so_as_ativas_e_em_ordem():
+    amanha = reservas.hoje() + timedelta(days=1)
+    depois = reservar_pelo_menu((amanha + timedelta(days=5)).isoformat())
+    antes = reservar_pelo_menu(amanha.isoformat())
+    cancelada = reservar_pelo_menu((amanha + timedelta(days=9)).isoformat())
+    requests.delete(f"{ATENDIMENTO}/menu/reservas/{cancelada['reserva_id']}", timeout=10)
+
+    lista = requests.get(f"{ATENDIMENTO}/menu/minhas-reservas", timeout=10).json()
+    assert [r["reserva_id"] for r in lista["reservas"]] == [antes["reserva_id"], depois["reserva_id"]]
+    assert lista["limite"] == 3
+
+
+def test_nao_cancela_reserva_inexistente_nem_de_outra_unidade():
+    assert requests.delete(f"{ATENDIMENTO}/menu/reservas/999999", timeout=10).json()["recusada"] == "reserva_inexistente"
+
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        cursor.execute("INSERT IGNORE INTO unidade (id, condominio_id, numero) VALUES (2, 1, '102')")
+        cursor.execute("INSERT IGNORE INTO morador (id, unidade_id, nome) VALUES (2, 2, 'Vizinho')")
+        conexao.commit()
+    do_vizinho = reservas.criar_reserva(SALAO, data_futura(), "tarde", 2)
+
+    # Para quem não é da unidade, a reserva do vizinho "não existe": nem confirma que ela existe.
+    recusa = requests.delete(f"{ATENDIMENTO}/menu/reservas/{do_vizinho['reserva_id']}", timeout=10)
+    assert recusa.status_code == 409
+    assert recusa.json()["recusada"] == "reserva_inexistente"
+    assert consulta("SELECT status FROM reserva WHERE id = %s", do_vizinho["reserva_id"])[0]["status"] == "ativa"
+
+
+def test_cancelar_devolve_a_vaga_do_limite():
+    amanha = reservas.hoje() + timedelta(days=1)
+    feitas = [reservar_pelo_menu((amanha + timedelta(days=d)).isoformat()) for d in range(3)]
+    with pytest.raises(reservas.ReservaRecusada):
+        reservas.criar_reserva(SALAO, (amanha + timedelta(days=9)).isoformat(), "noite", banco.MORADOR_DEMO_ID)
+
+    reservas.cancelar_reserva(feitas[0]["reserva_id"], banco.MORADOR_DEMO_ID)
+    reservas.criar_reserva(SALAO, (amanha + timedelta(days=9)).isoformat(), "noite", banco.MORADOR_DEMO_ID)
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.cancelar_reserva(feitas[0]["reserva_id"], banco.MORADOR_DEMO_ID)
+    assert recusa.value.motivo == "reserva_inexistente", "cancelar duas vezes não gera segundo evento"
+
+
+def test_cancelamento_que_chega_antes_da_solicitacao_nao_cobra():
+    # Reserva e taxa gravadas sem evento, para os dois eventos entrarem na fila na ordem trocada.
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO reserva (area_comum_id, unidade_id, morador_id, data, periodo, status) "
+            "VALUES (1, 1, 1, %s, 'manha', 'cancelada')",
+            (data_futura(),),
+        )
+        reserva_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO lancamento_financeiro (reserva_id, unidade_id, descricao, valor) VALUES (%s, 1, 'teste', 150)",
+            (reserva_id,),
+        )
+        lancamento_id = cursor.lastrowid
+        conexao.commit()
+
+    def evento(tipo):
+        return json.dumps({"evento_id": str(uuid.uuid4()), "tipo": tipo, "reserva_id": reserva_id, "lancamento_id": lancamento_id})
+
+    sqs.send_message(QueueUrl=FILA, MessageBody=evento("ReservaCancelada"))
+    assert esperar(lambda: status_do_lancamento(reserva_id) == "cancelado")
+    sqs.send_message(QueueUrl=FILA, MessageBody=evento("ReservaSolicitada"))
+    assert esperar(lambda: contar("evento_processado") == 2)
+
+    assert status_do_lancamento(reserva_id) == "cancelado"
+    assert consulta("SELECT referencia_pagamento FROM lancamento_financeiro WHERE id = %s", lancamento_id)[0]["referencia_pagamento"] is None
+    assert consultar_dlq() == []
+
+
+def test_migracao_de_um_banco_da_v3():
+    """Os bancos de Ohio e de São Paulo nasceram na v3, sem status nem cancelamento."""
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        # Volta o esquema ao da v3.
+        cursor.execute("ALTER TABLE reserva ADD UNIQUE KEY uma_reserva_por_horario (area_comum_id, data, periodo)")
+        cursor.execute("ALTER TABLE reserva DROP INDEX uma_reserva_ativa_por_horario")
+        cursor.execute("ALTER TABLE reserva DROP COLUMN vaga, DROP COLUMN cancelada_em, DROP COLUMN status")
+        cursor.execute("ALTER TABLE lancamento_financeiro MODIFY status ENUM('pendente', 'cobranca_gerada') NOT NULL DEFAULT 'pendente'")
+        data = data_futura()
+        cursor.execute(
+            "INSERT INTO reserva (area_comum_id, unidade_id, morador_id, data, periodo) VALUES (1, 1, 1, %s, 'noite')",
+            (data,),
+        )
+        conexao.commit()
+
+        banco.migrar(cursor)
+        banco.migrar(cursor)  # duas tasks subindo: a segunda não pode quebrar
+        conexao.commit()
+
+    assert consulta("SELECT status FROM reserva")[0]["status"] == "ativa"
+    indices = {linha["Key_name"] for linha in consulta("SHOW INDEX FROM reserva")}
+    assert "uma_reserva_ativa_por_horario" in indices
+    assert "uma_reserva_por_horario" not in indices
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
+    assert recusa.value.motivo == "horario_ocupado"

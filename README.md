@@ -78,27 +78,33 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 
 **Próximo passo:**
 
-1. Antes de apresentar, em Ohio: **apagar as reservas de teste** (12/12, 13/12 e 20/12). A unidade de
-   demo está no limite de 3 reservas futuras e recusa qualquer reserva nova com `limite_da_unidade`.
-   Em São Paulo há 1 reserva de teste (churrasqueira, 15/12), que some no próximo `destroy`.
-2. Atualizar o resumo público (artefato) com a etapa 2.
-3. Pequena correção para uma `v4`: a linha `evento publicado` sai com `correlation_id` `-` quando o
-   publicador roda fora da requisição (a nova tentativa a cada 10 s). O `correlation_id` da mensagem
-   está certo.
+1. Antes de apresentar, em Ohio: **cancelar as 3 reservas de teste** (12/12, 13/12 e 20/12), que lotam
+   a unidade de demo. Desde a v4, dá para fazer pela própria página: "Minhas reservas" → "Cancelar".
+2. Atualizar o resumo público (artefato) com a etapa 2 e a v4.
+3. Opcional: fechar a janela de ~1 min sem banco durante a rotação da senha, tentando também a versão
+   `AWSPENDING` do segredo.
 
 **Colar no CloudShell:** ele às vezes come o primeiro caractere de um bloco colado. Blocos longos
 começam por uma linha de comentário.
 
 **Para publicar uma versão nova do código:**
 
-1. No PC: `python scripts/gerar-zip.py`, que grava `../cloud-projeto-final.zip`, sem o `.env`.
-2. No CloudShell: apagar o `.zip` antigo, enviar o novo por **Ações → Carregar arquivo** e extrair em
-   `~/projeto`.
-3. `docker login` no ECR, `docker build` e `docker push` com uma tag nova (`v3`, …).
-4. Trocar a tag em `docs/task-definitions/<serviço>.json`, depois `aws ecs register-task-definition
-   --cli-input-json file://…` e `aws ecs update-service --task-definition <família>:<revisão>`.
+- **São Paulo:** `terraform apply` em `infra/terraform/ambiente`. A tag da imagem é o hash do código,
+  então código novo gera imagem, revisão da task definition e implantação sozinho.
+- **Ohio** (etapa 1, sem IaC), do PC, com o perfil SSO `cloud`:
+  1. `python scripts/publicar-imagem.py us-east-2 <conta>.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/<serviço> <tag> app/<serviço>`.
+  2. Trocar a tag em `docs/task-definitions/<serviço>.json`, `aws ecs register-task-definition --cli-input-json file://…`
+     e `aws ecs update-service --task-definition <família>:<revisão>`. **O `operacoes` primeiro**, para ele já
+     entender os eventos novos quando o `atendimento` novo subir.
 
-Hoje rodam `atendimento:v3` (revisão 3) e `operacoes:v1` (revisão 1).
+Hoje rodam, em Ohio, `atendimento:v4` (revisão 4) e `operacoes:v4` (revisão 2).
+
+**v4 (12/11):** "minhas reservas" e cancelamento (pelo chat e pela página), front-end com sugestões e
+painéis, e a senha do banco relida no Secrets Manager quando o RDS a rotaciona. Em 12/11, a rotação
+automática de 05:08 tinha derrubado o chat de Ohio até as tasks serem reiniciadas (evidência em
+`docs/evidencias/2026-11-12-ohio-senha-rotacionada.txt`). Com a v4, uma rotação forçada em São Paulo
+deixou o banco indisponível por ~1 min, só durante a própria rotação, e o app voltou sozinho
+(`docs/evidencias/2026-11-12-sp-3-rotacao-da-senha.txt`).
 
 ## Arquitetura
 

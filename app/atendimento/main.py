@@ -152,3 +152,16 @@ def menu_reservar(pedido: PedidoDeReserva):
         return reservas.criar_reserva(pedido.area, pedido.data, pedido.periodo, banco.MORADOR_DEMO_ID)
     except reservas.ReservaRecusada as recusa:
         return JSONResponse(status_code=409, content={"recusada": recusa.motivo})
+
+
+@app.get("/menu/minhas-reservas")
+def menu_minhas_reservas():
+    return reservas.listar_minhas_reservas(banco.MORADOR_DEMO_ID)
+
+
+@app.delete("/menu/reservas/{reserva_id}")
+def menu_cancelar(reserva_id: int):
+    try:
+        return reservas.cancelar_reserva(reserva_id, banco.MORADOR_DEMO_ID)
+    except reservas.ReservaRecusada as recusa:
+        return JSONResponse(status_code=409, content={"recusada": recusa.motivo})

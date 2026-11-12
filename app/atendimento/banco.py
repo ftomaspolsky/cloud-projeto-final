@@ -3,12 +3,19 @@
 As tabelas nascem quando o serviço sobe porque o RDS não tem acesso público: não há de onde
 rodar um script de fora da VPC. Tudo aqui é idempotente, então duas tasks subindo juntas não
 se atrapalham.
+
+A senha do banco é rotacionada pelo RDS a cada 7 dias. O ECS injeta a senha só quando a task
+sobe, então uma task antiga passa a ouvir "Access denied" (visto em Ohio, em 12/11). Por isso,
+ao receber esse erro, a conexão relê a senha atual no Secrets Manager e tenta de novo.
 """
 
+import json
 import logging
 import os
+import threading
 import time
 
+import boto3
 import pymysql
 from pymysql.cursors import DictCursor
 
@@ -50,6 +57,8 @@ TABELAS = [
            FOREIGN KEY (condominio_id) REFERENCES condominio (id)
        )""",
     # A UNIQUE é quem garante que não existe reserva dupla, mesmo com duas tasks ao mesmo tempo.
+    # Reserva cancelada não é apagada (o histórico e a cobrança apontam para ela): ela sai da
+    # UNIQUE porque `vaga` vira NULL, e o MySQL aceita vários NULL numa chave única.
     """CREATE TABLE IF NOT EXISTS reserva (
            id BIGINT AUTO_INCREMENT PRIMARY KEY,
            area_comum_id INT NOT NULL,
@@ -57,8 +66,11 @@ TABELAS = [
            morador_id INT NOT NULL,
            data DATE NOT NULL,
            periodo ENUM('manha', 'tarde', 'noite') NOT NULL,
+           status ENUM('ativa', 'cancelada') NOT NULL DEFAULT 'ativa',
            criada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-           UNIQUE KEY uma_reserva_por_horario (area_comum_id, data, periodo),
+           cancelada_em TIMESTAMP NULL,
+           vaga TINYINT AS (IF(status = 'ativa', 1, NULL)) STORED,
+           UNIQUE KEY uma_reserva_ativa_por_horario (area_comum_id, data, periodo, vaga),
            FOREIGN KEY (area_comum_id) REFERENCES area_comum (id),
            FOREIGN KEY (unidade_id) REFERENCES unidade (id),
            FOREIGN KEY (morador_id) REFERENCES morador (id)
@@ -69,7 +81,7 @@ TABELAS = [
            unidade_id INT NOT NULL,
            descricao VARCHAR(160) NOT NULL,
            valor DECIMAL(10, 2) NOT NULL,
-           status ENUM('pendente', 'cobranca_gerada') NOT NULL DEFAULT 'pendente',
+           status ENUM('pendente', 'cobranca_gerada', 'cancelado') NOT NULL DEFAULT 'pendente',
            referencia_pagamento VARCHAR(64),
            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
            FOREIGN KEY (reserva_id) REFERENCES reserva (id)
@@ -105,7 +117,34 @@ DADOS_INICIAIS = [
 ]
 
 
+_credenciais = {}
+_trava_credenciais = threading.Lock()
+ACESSO_NEGADO = 1045
+
+
+def _credenciais_atuais(reler=False):
+    """Usuário e senha. Começa pelo que o ECS injetou; relê no Secrets Manager quando pedido."""
+    with _trava_credenciais:
+        if reler and os.environ.get("DB_SECRET_ARN"):
+            segredos = boto3.client("secretsmanager", region_name=os.environ["AWS_REGION"])
+            valor = json.loads(segredos.get_secret_value(SecretId=os.environ["DB_SECRET_ARN"])["SecretString"])
+            _credenciais.update(user=valor["username"], password=valor["password"])
+            registrar(logging.WARNING, "senha do banco relida no Secrets Manager")
+        if not _credenciais:
+            _credenciais.update(user=os.environ["DB_USER"], password=os.environ["DB_PASSWORD"])
+        return dict(_credenciais)
+
+
 def conectar():
+    try:
+        return _abrir(_credenciais_atuais())
+    except pymysql.err.OperationalError as erro:
+        if erro.args[0] != ACESSO_NEGADO or not os.environ.get("DB_SECRET_ARN"):
+            raise
+        return _abrir(_credenciais_atuais(reler=True))
+
+
+def _abrir(credenciais):
     opcoes = {}
     # Na AWS, o caminho do certificado do RDS vem por variável de ambiente. Local não há TLS.
     if os.environ.get("DB_SSL_CA"):
@@ -116,8 +155,8 @@ def conectar():
         }
     return pymysql.connect(
         host=os.environ["DB_HOST"],
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
+        user=credenciais["user"],
+        password=credenciais["password"],
         database=os.environ["DB_NAME"],
         charset="utf8mb4",
         cursorclass=DictCursor,
@@ -127,10 +166,61 @@ def conectar():
     )
 
 
+# Erros que querem dizer "outra task já fez esta migração": coluna, chave ou índice já mexidos.
+JA_MIGRADO = {1060, 1061, 1091}
+
+
+def _tem_coluna(cursor, tabela, coluna):
+    cursor.execute(
+        """SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s""",
+        (tabela, coluna),
+    )
+    linha = cursor.fetchone()
+    return linha["COLUMN_TYPE"] if linha else None
+
+
+def _tem_indice(cursor, tabela, indice):
+    cursor.execute(
+        """SELECT 1 FROM information_schema.STATISTICS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND INDEX_NAME = %s LIMIT 1""",
+        (tabela, indice),
+    )
+    return cursor.fetchone() is not None
+
+
+def _alterar(cursor, comando):
+    try:
+        cursor.execute(comando)
+    except pymysql.err.OperationalError as erro:
+        if erro.args[0] not in JA_MIGRADO:
+            raise
+
+
+def migrar(cursor):
+    """Leva um banco da v3 (sem cancelamento) ao esquema atual. Idempotente."""
+    if not _tem_coluna(cursor, "reserva", "status"):
+        _alterar(cursor, """ALTER TABLE reserva
+            ADD COLUMN status ENUM('ativa', 'cancelada') NOT NULL DEFAULT 'ativa' AFTER periodo,
+            ADD COLUMN cancelada_em TIMESTAMP NULL,
+            ADD COLUMN vaga TINYINT AS (IF(status = 'ativa', 1, NULL)) STORED""")
+    # A chave nova entra antes de a antiga sair: a chave estrangeira de area_comum_id precisa
+    # de um índice que comece por ela o tempo todo.
+    if not _tem_indice(cursor, "reserva", "uma_reserva_ativa_por_horario"):
+        _alterar(cursor, """ALTER TABLE reserva ADD UNIQUE KEY uma_reserva_ativa_por_horario
+                            (area_comum_id, data, periodo, vaga)""")
+    if _tem_indice(cursor, "reserva", "uma_reserva_por_horario"):
+        _alterar(cursor, "ALTER TABLE reserva DROP INDEX uma_reserva_por_horario")
+    if "cancelado" not in (_tem_coluna(cursor, "lancamento_financeiro", "status") or ""):
+        _alterar(cursor, """ALTER TABLE lancamento_financeiro MODIFY status
+                            ENUM('pendente', 'cobranca_gerada', 'cancelado') NOT NULL DEFAULT 'pendente'""")
+
+
 def preparar_banco():
     with conectar() as conexao, conexao.cursor() as cursor:
         for tabela in TABELAS:
             cursor.execute(tabela)
+        migrar(cursor)
         for comando, parametros in DADOS_INICIAIS:
             cursor.execute(comando, parametros)
         conexao.commit()

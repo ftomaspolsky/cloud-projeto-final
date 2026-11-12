@@ -1,0 +1,23 @@
+# Ohio: o chat caiu com a rotação automática da senha do RDS (12/11, horários UTC)
+
+## o segredo (rotação automática a cada 7 dias)
+{
+    "rotacao": true,
+    "regra": {
+        "AutomaticallyAfterDays": 7
+    },
+    "ultima": "2026-11-12T05:08:58.053000-03:00"
+}
+
+## primeiro Access denied no log do atendimento (consultado às 16:06 UTC)
+{"ts": "2026-11-12T08:08:00", "nivel": "ERROR", "servico": "atendimento", "corre... "Access denied for user 'admin'@<ip> (using password: YES)"}
+# 08:08 UTC = 05:08 em Brasília, o instante da rotação. O alarme acendeu 1 min depois e só voltou a OK depois da correção.
+
+## histórico do alarme erros-atendimento
+2026-11-12T13:15:12.586000-03:00	Alarm updated from ALARM to OK
+2026-11-12T05:09:12.584000-03:00	Alarm updated from OK to ALARM
+2026-11-11T12:04:12.580000-03:00	Alarm updated from ALARM to OK
+2026-11-11T11:59:12.580000-03:00	Alarm updated from OK to ALARM
+
+## correção imediata: update-service --force-new-deployment nos 2 serviços, 16:07:45 a 16:10:27
+## depois disso, o chat respondeu ("Quais áreas comuns posso reservar?" -> 200, modo ia)

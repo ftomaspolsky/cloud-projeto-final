@@ -1,0 +1,38 @@
+# São Paulo, v4: rotação forçada da senha do RDS com as tasks rodando (12/11, horários UTC)
+# aws secretsmanager rotate-secret pedido às 16:37:42; LastRotatedDate 16:38:53.
+# As tasks da v4 tinham subido às ~16:29, com a senha anterior.
+
+## log do atendimento (Access denied e releitura)
+{"ts": "2026-11-12T16:37:56", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:37:56", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:37:57", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:37:57", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:06", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:06", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:07", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:07", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:16", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:16", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:17", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:18", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:26", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:26", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:28", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:28", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:36", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:36", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:38", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:38", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:46", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:46", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:48", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:48", "nivel": "ERROR", "servico": "atendimento", "correlation_id": "-", "msg": "falha ao publicar eventos", "erro": "(1045, \"Access denied for user 'admin'@<ip> (using password: YES)\")"}
+{"ts": "2026-11-12T16:38:56", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+{"ts": "2026-11-12T16:38:58", "nivel": "WARNING", "servico": "atendimento", "correlation_id": "-", "msg": "senha do banco relida no Secrets Manager"}
+
+## depois: chat 200 (modo ia) e 4 x /menu/minhas-reservas 200, sem reiniciar nada
+
+## alarme erros-atendimento
+2026-11-12T13:44:40.483000-03:00	Alarm updated from ALARM to OK
+2026-11-12T13:39:40.481000-03:00	Alarm updated from OK to ALARM
+2026-11-12T12:33:40.485000-03:00	Alarm updated from INSUFFICIENT_DATA to OK

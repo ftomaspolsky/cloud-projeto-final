@@ -8,27 +8,50 @@
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { display: flex; flex-direction: column; max-width: 640px; margin: 0 auto; background: #efeae2; font: 15px/1.4 system-ui, sans-serif; color: #111b21; }
-  header { background: #075e54; color: #fff; padding: 14px 16px; font-weight: 600; }
-  header small { display: block; font-weight: 400; opacity: .85; }
+  body { display: flex; flex-direction: column; max-width: 720px; margin: 0 auto; background: #efeae2; font: 15px/1.45 system-ui, sans-serif; color: #111b21; }
+  header { background: #075e54; color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  header .avatar { width: 38px; height: 38px; border-radius: 50%; background: #25d366; display: grid; place-items: center; font-size: 20px; flex: none; }
+  header strong { display: block; font-size: 16px; }
+  header small { opacity: .85; }
   #conversa { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .balao { max-width: 80%; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; background: #fff; align-self: flex-start; }
-  .balao.morador { background: #d9fdd3; align-self: flex-end; }
-  .balao.sistema { background: #fff3c4; align-self: center; }
-  #menu { background: #fff; padding: 12px; border-radius: 8px; display: grid; gap: 8px; align-self: stretch; }
-  #menu label { display: grid; gap: 2px; font-size: 13px; }
+  .balao { max-width: 85%; padding: 8px 12px; border-radius: 10px; overflow-wrap: anywhere; background: #fff; align-self: flex-start; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+  .balao p { margin: 0 0 6px; } .balao p:last-child { margin: 0; }
+  .balao ul { margin: 4px 0; padding-left: 20px; }
+  .balao.morador { background: #d9fdd3; align-self: flex-end; white-space: pre-wrap; }
+  .balao.sistema { background: #fff3c4; align-self: center; text-align: center; }
+  .balao.digitando { color: #667781; font-style: italic; }
+  .sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: #fff; color: #075e54; border: 1px solid #075e54; border-radius: 16px; padding: 5px 12px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .chip:hover { background: #e7f5f2; }
+  .painel { background: #fff; padding: 12px; border-radius: 10px; align-self: stretch; display: grid; gap: 10px; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+  .painel h3 { margin: 0; font-size: 15px; }
+  .painel label { display: grid; gap: 2px; font-size: 13px; color: #3b4a54; }
+  .cartao { border: 1px solid #d1d7db; border-left: 4px solid #25d366; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .cartao .info small { display: block; color: #667781; }
+  .cartao button.perigo { background: #fff; color: #b3261e; border: 1px solid #b3261e; }
+  .cartao button.perigo.confirmar { background: #b3261e; color: #fff; }
+  .vazio { color: #667781; }
   select, input, button { font: inherit; padding: 8px; border: 1px solid #c8c8c8; border-radius: 6px; }
   button { background: #075e54; color: #fff; border: 0; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
-  form#envio { display: flex; gap: 8px; padding: 10px; background: #f0f2f5; }
-  form#envio input { flex: 1; }
+  #atalhos { display: flex; gap: 6px; padding: 8px 10px 0; background: #f0f2f5; overflow-x: auto; }
+  form#envio { display: flex; gap: 8px; padding: 8px 10px 10px; background: #f0f2f5; }
+  form#envio input { flex: 1; min-width: 0; }
 </style>
 </head>
 <body>
-<header>Atendente do condomínio<small>Residencial Exemplo · unidade 101</small></header>
+<header>
+  <div class="avatar" aria-hidden="true">🏢</div>
+  <div><strong>Atendente do condomínio</strong><small>Residencial Exemplo · unidade 101 · reservas de áreas comuns</small></div>
+</header>
 <main id="conversa" aria-live="polite"></main>
+<nav id="atalhos" aria-label="Atalhos">
+  <button type="button" class="chip" data-acao="minhas">📋 Minhas reservas</button>
+  <button type="button" class="chip" data-acao="formulario">📝 Reservar pelo formulário</button>
+  <button type="button" class="chip" data-texto="Quais áreas posso reservar e quanto custa cada uma?">🏷️ Áreas e taxas</button>
+</nav>
 <form id="envio">
-  <input id="texto" maxlength="2000" autocomplete="off" required placeholder="Ex.: reserva o salão sábado à noite" aria-label="Mensagem">
+  <input id="texto" maxlength="2000" autocomplete="off" required placeholder="Escreva aqui. Ex.: a churrasqueira está livre sábado à noite?" aria-label="Mensagem">
   <button id="enviar">Enviar</button>
 </form>
 <script>
@@ -36,14 +59,60 @@
   const texto = document.getElementById("texto");
   const enviar = document.getElementById("enviar");
   const NOMES_DOS_PERIODOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite" };
+  const MOTIVOS = {
+    limite_da_unidade: "Sua unidade já tem 3 reservas futuras, que é o limite. Cancele uma em “Minhas reservas” para reservar outra.",
+    horario_ocupado: "Esse horário já está reservado. Escolha outra data ou outro período.",
+    data_no_passado: "Essa data já passou.",
+    data_muito_distante: "Só dá para reservar com até 180 dias de antecedência.",
+    data_invalida: "A data não está num formato válido.",
+    periodo_invalido: "O período tem que ser manhã, tarde ou noite.",
+    area_inexistente: "Essa área não existe no condomínio.",
+    reserva_inexistente: "Não encontrei essa reserva entre as suas reservas ativas.",
+    reserva_passada: "Essa reserva já aconteceu e não pode mais ser cancelada.",
+    sistema_indisponivel: "O sistema está indisponível. Tente de novo em instantes.",
+  };
   let conversaId = null;
+
+  function rolar() { conversa.scrollTop = conversa.scrollHeight; }
+  function reais(valor) { return "R$ " + Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
+  function dataBR(iso) { const [a, m, d] = iso.split("-"); return `${d}/${m}/${a}`; }
+  function motivo(corpo) { return MOTIVOS[corpo.recusada || corpo.erro] || "Não foi possível concluir o pedido."; }
+
+  // Negrito e listas simples, a partir de texto já escapado: nada do modelo vira HTML.
+  function formatar(conteudo) {
+    const escapar = t => t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const negrito = t => t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    let html = "", lista = false;
+    for (const linha of escapar(conteudo).split("\n")) {
+      const item = linha.match(/^\s*[-•*]\s+(.*)$/);
+      if (item) {
+        if (!lista) { html += "<ul>"; lista = true; }
+        html += `<li>${negrito(item[1])}</li>`;
+      } else {
+        if (lista) { html += "</ul>"; lista = false; }
+        if (linha.trim()) html += `<p>${negrito(linha)}</p>`;
+      }
+    }
+    return html + (lista ? "</ul>" : "");
+  }
 
   function balao(conteudo, classe) {
     const elemento = document.createElement("div");
     elemento.className = "balao " + (classe || "");
-    elemento.textContent = conteudo;
+    if (classe === "morador") elemento.textContent = conteudo;
+    else elemento.innerHTML = formatar(conteudo);
     conversa.appendChild(elemento);
-    conversa.scrollTop = conversa.scrollHeight;
+    rolar();
+    return elemento;
+  }
+
+  function chip(rotulo, aoClicar) {
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "chip";
+    botao.textContent = rotulo;
+    botao.addEventListener("click", aoClicar);
+    return botao;
   }
 
   function campo(rotulo, controle) {
@@ -55,32 +124,31 @@
 
   function opcoes(lista) {
     const select = document.createElement("select");
-    for (const [valor, nome] of lista) {
-      select.add(new Option(nome, valor));
-    }
+    for (const [valor, nome] of lista) select.add(new Option(nome, valor));
     return select;
   }
 
   async function mostrarMenu() {
-    if (document.getElementById("menu")) return;
+    document.getElementById("menu")?.remove();
     const resposta = await fetch("/menu/areas");
-    if (!resposta.ok) {
-      balao("O sistema está indisponível. Tente de novo em instantes.", "sistema");
-      return;
-    }
+    if (!resposta.ok) { balao(MOTIVOS.sistema_indisponivel, "sistema"); return; }
     const { areas, periodos } = await resposta.json();
 
-    const area = opcoes(areas.map(a => [a.nome, `${a.nome} (R$ ${a.taxa})`]));
+    const area = opcoes(areas.map(a => [a.nome, `${a.nome} (${reais(a.taxa)})`]));
     const data = document.createElement("input");
     data.type = "date";
     data.required = true;
+    data.min = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
     const periodo = opcoes(periodos.map(p => [p, NOMES_DOS_PERIODOS[p] || p]));
     const botao = document.createElement("button");
     botao.textContent = "Reservar";
 
     const menu = document.createElement("form");
     menu.id = "menu";
-    menu.append(campo("Área", area), campo("Data", data), campo("Período", periodo), botao);
+    menu.className = "painel";
+    const titulo = document.createElement("h3");
+    titulo.textContent = "Reservar pelo formulário";
+    menu.append(titulo, campo("Área", area), campo("Data", data), campo("Período", periodo), botao);
     menu.addEventListener("submit", async evento => {
       evento.preventDefault();
       botao.disabled = true;
@@ -91,24 +159,83 @@
       });
       const corpo = await resultado.json();
       if (resultado.ok) {
-        balao(`Reserva registrada: ${corpo.area}, ${corpo.data}, período ${corpo.periodo}, taxa de R$ ${corpo.taxa}.`);
+        balao(`✅ **Reserva confirmada**\n- ${corpo.area}\n- ${dataBR(corpo.data)}, ${NOMES_DOS_PERIODOS[corpo.periodo]}\n- Taxa de ${reais(corpo.taxa)}\n- Número da reserva: ${corpo.reserva_id}`);
         menu.remove();
       } else {
-        balao(`Não foi possível reservar (${corpo.recusada || corpo.erro}).`, "sistema");
+        balao(motivo(corpo), "sistema");
         botao.disabled = false;
       }
     });
     conversa.appendChild(menu);
-    conversa.scrollTop = conversa.scrollHeight;
+    rolar();
   }
 
-  document.getElementById("envio").addEventListener("submit", async evento => {
-    evento.preventDefault();
-    const mensagem = texto.value.trim();
-    if (!mensagem) return;
+  async function mostrarMinhasReservas() {
+    document.getElementById("minhas")?.remove();
+    const resposta = await fetch("/menu/minhas-reservas");
+    if (!resposta.ok) { balao(MOTIVOS.sistema_indisponivel, "sistema"); return; }
+    const { reservas, limite } = await resposta.json();
+
+    const painel = document.createElement("section");
+    painel.id = "minhas";
+    painel.className = "painel";
+    const titulo = document.createElement("h3");
+    const atualizarTitulo = () => {
+      titulo.textContent = `Minhas reservas (${painel.querySelectorAll(".cartao").length} de ${limite} possíveis)`;
+    };
+    painel.appendChild(titulo);
+
+    if (!reservas.length) {
+      const vazio = document.createElement("div");
+      vazio.className = "vazio";
+      vazio.textContent = "Nenhuma reserva futura. Que tal reservar uma área?";
+      painel.appendChild(vazio);
+    }
+    for (const r of reservas) {
+      const cartao = document.createElement("div");
+      cartao.className = "cartao";
+      const info = document.createElement("div");
+      info.className = "info";
+      const nome = document.createElement("strong");
+      nome.textContent = `${r.area} · ${dataBR(r.data)} · ${NOMES_DOS_PERIODOS[r.periodo]}`;
+      const detalhe = document.createElement("small");
+      detalhe.textContent =
+        `Reserva nº ${r.reserva_id} · ${reais(r.taxa)} · ${r.cobranca === "cobranca_gerada" ? "cobrança gerada" : "cobrança em processamento"}`;
+      info.append(nome, detalhe);
+
+      const cancelar = document.createElement("button");
+      cancelar.className = "perigo";
+      cancelar.textContent = "Cancelar";
+      cancelar.addEventListener("click", async () => {
+        if (!cancelar.classList.contains("confirmar")) {
+          cancelar.classList.add("confirmar");
+          cancelar.textContent = "Confirmar cancelamento";
+          return;
+        }
+        cancelar.disabled = true;
+        const resultado = await fetch(`/menu/reservas/${r.reserva_id}`, { method: "DELETE" });
+        const corpo = await resultado.json();
+        if (resultado.ok) {
+          balao(`🗑️ **Reserva ${corpo.reserva_id} cancelada:** ${corpo.area}, ${dataBR(corpo.data)}, ${NOMES_DOS_PERIODOS[corpo.periodo]}. A taxa também foi cancelada.`);
+          cartao.remove();
+          atualizarTitulo();
+        } else {
+          balao(motivo(corpo), "sistema");
+          cancelar.disabled = false;
+        }
+      });
+      cartao.append(info, cancelar);
+      painel.appendChild(cartao);
+    }
+    atualizarTitulo();
+    conversa.appendChild(painel);
+    rolar();
+  }
+
+  async function mandar(mensagem) {
     balao(mensagem, "morador");
-    texto.value = "";
     enviar.disabled = true;
+    const espera = balao("digitando…", "digitando");
     try {
       const resposta = await fetch("/chat", {
         method: "POST",
@@ -116,18 +243,50 @@
         body: JSON.stringify({ mensagem, conversa_id: conversaId }),
       });
       const corpo = await resposta.json();
+      espera.remove();
       if (corpo.conversa_id) conversaId = corpo.conversa_id;
-      balao(corpo.resposta || "O sistema está indisponível. Tente de novo em instantes.", resposta.ok ? "" : "sistema");
+      balao(corpo.resposta || MOTIVOS.sistema_indisponivel, resposta.ok ? "" : "sistema");
       if (corpo.modo === "menu") await mostrarMenu();
     } catch {
+      espera.remove();
       balao("Sem conexão com o sistema. Tente de novo.", "sistema");
     } finally {
       enviar.disabled = false;
       texto.focus();
     }
+  }
+
+  document.getElementById("envio").addEventListener("submit", evento => {
+    evento.preventDefault();
+    const mensagem = texto.value.trim();
+    if (!mensagem) return;
+    texto.value = "";
+    mandar(mensagem);
   });
 
-  balao("Olá! Posso consultar a disponibilidade e reservar as áreas comuns. O que você precisa?");
+  document.getElementById("atalhos").addEventListener("click", evento => {
+    const botao = evento.target.closest("button");
+    if (!botao) return;
+    if (botao.dataset.acao === "minhas") mostrarMinhasReservas();
+    else if (botao.dataset.acao === "formulario") mostrarMenu();
+    else if (botao.dataset.texto) mandar(botao.dataset.texto);
+  });
+
+  const boasVindas = balao(
+    "Olá! Sou o atendente virtual do condomínio. Posso:\n" +
+    "- **consultar** se uma área está livre (salão de festas, churrasqueira ou quadra)\n" +
+    "- **reservar** para você, já com a taxa\n" +
+    "- **mostrar e cancelar** as suas reservas\n" +
+    "Escreva do seu jeito, ou toque numa sugestão:"
+  );
+  const sugestoes = document.createElement("div");
+  sugestoes.className = "sugestoes";
+  sugestoes.append(
+    chip("A churrasqueira está livre no sábado?", () => mandar("A churrasqueira está livre no próximo sábado?")),
+    chip("Quero reservar o salão de festas", () => mandar("Quero reservar o salão de festas")),
+    chip("📋 Minhas reservas", mostrarMinhasReservas),
+  );
+  boasVindas.appendChild(sugestoes);
 </script>
 </body>
 </html>

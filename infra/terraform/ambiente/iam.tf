@@ -140,3 +140,24 @@ resource "aws_iam_role_policy" "operacoes_fila" {
     }]
   })
 }
+
+# ------------------------------------------------ 5. as duas aplicações releem a senha do banco
+# O RDS rotaciona a senha a cada 7 dias, e o ECS só a injeta quando a task sobe. Em 12/11, em
+# Ohio, as tasks antigas passaram a ouvir "Access denied". Desde a v4, o código relê a senha
+# no Secrets Manager quando isso acontece, e para isso a role da aplicação precisa ler o segredo.
+resource "aws_iam_role_policy" "app_le_segredo" {
+  for_each = {
+    atendimento = aws_iam_role.app_atendimento.id
+    operacoes   = aws_iam_role.app_operacoes.id
+  }
+  name = "reler-segredo-rds"
+  role = each.value
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = aws_db_instance.principal.master_user_secret[0].secret_arn
+    }]
+  })
+}

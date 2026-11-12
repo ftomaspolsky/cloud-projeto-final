@@ -7,7 +7,7 @@
   "containerDefinitions": [
     {
       "name": "operacoes",
-      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/operacoes:v1",
+      "image": "116979769772.dkr.ecr.us-east-2.amazonaws.com/cloud-projeto-final/operacoes:v4",
       "essential": true,
       "cpu": 128,
       "memoryReservation": 128,
@@ -17,7 +17,8 @@
         { "name": "QUEUE_NAME", "value": "cloud-projeto-final-eventos" },
         { "name": "DB_HOST", "value": "cloud-projeto-final-db.cv9czqvj0wwr.us-east-2.rds.amazonaws.com" },
         { "name": "DB_NAME", "value": "condominio" },
-        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" }
+        { "name": "DB_SSL_CA", "value": "/app/rds-ca.pem" },
+        { "name": "DB_SECRET_ARN", "value": "arn:aws:secretsmanager:us-east-2:116979769772:secret:rds!db-267233f0-daee-4a7e-a3cf-4eb7e114f0c5-3ZsMvl" }
       ],
       "secrets": [
         {

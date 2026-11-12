@@ -60,7 +60,7 @@ def consultar_disponibilidade(area, data):
     with conectar() as conexao, conexao.cursor() as cursor:
         encontrada = _buscar_area(cursor, area)
         cursor.execute(
-            "SELECT periodo FROM reserva WHERE area_comum_id = %s AND data = %s",
+            "SELECT periodo FROM reserva WHERE area_comum_id = %s AND data = %s AND status = 'ativa'",
             (encontrada["id"], dia),
         )
         ocupados = {linha["periodo"] for linha in cursor.fetchall()}
@@ -90,11 +90,11 @@ def _gravar_lancamento(cursor, reserva_id, unidade_id, area, dia, periodo):
     return cursor.lastrowid
 
 
-def _gravar_evento(cursor, reserva_id, lancamento_id):
+def _gravar_evento(cursor, reserva_id, lancamento_id, tipo="ReservaSolicitada"):
     evento_id = str(uuid.uuid4())
     corpo = {
         "evento_id": evento_id,
-        "tipo": "ReservaSolicitada",
+        "tipo": tipo,
         "reserva_id": reserva_id,
         "lancamento_id": lancamento_id,
     }
@@ -121,7 +121,7 @@ def criar_reserva(area, data, periodo, morador_id):
         # dois poderiam ler a contagem antes do outro gravar e estourar o limite.
         cursor.execute("SELECT id FROM unidade WHERE id = %s FOR UPDATE", (unidade_id,))
         cursor.execute(
-            "SELECT COUNT(*) AS total FROM reserva WHERE unidade_id = %s AND data >= %s",
+            "SELECT COUNT(*) AS total FROM reserva WHERE unidade_id = %s AND data >= %s AND status = 'ativa'",
             (unidade_id, hoje()),
         )
         if cursor.fetchone()["total"] >= LIMITE_RESERVAS_FUTURAS_POR_UNIDADE:
@@ -149,4 +149,89 @@ def criar_reserva(area, data, periodo, morador_id):
         "data": dia.isoformat(),
         "periodo": periodo,
         "taxa": str(encontrada["taxa"]),
+    }
+
+
+def _unidade_do_morador(cursor, morador_id):
+    cursor.execute("SELECT unidade_id FROM morador WHERE id = %s", (morador_id,))
+    morador = cursor.fetchone()
+    if morador is None:
+        raise ReservaRecusada("morador_inexistente")
+    return morador["unidade_id"]
+
+
+def listar_minhas_reservas(morador_id):
+    """As reservas ativas, de hoje em diante, da unidade do morador."""
+    with conectar() as conexao, conexao.cursor() as cursor:
+        unidade_id = _unidade_do_morador(cursor, morador_id)
+        cursor.execute(
+            """SELECT r.id, a.nome, r.data, r.periodo, a.taxa, l.status AS cobranca
+               FROM reserva r
+               JOIN area_comum a ON a.id = r.area_comum_id
+               JOIN lancamento_financeiro l ON l.reserva_id = r.id
+               WHERE r.unidade_id = %s AND r.status = 'ativa' AND r.data >= %s
+               ORDER BY r.data, FIELD(r.periodo, 'manha', 'tarde', 'noite')""",
+            (unidade_id, hoje()),
+        )
+        linhas = cursor.fetchall()
+    return {
+        "reservas": [
+            {
+                "reserva_id": r["id"],
+                "area": r["nome"],
+                "data": r["data"].isoformat(),
+                "periodo": r["periodo"],
+                "taxa": str(r["taxa"]),
+                "cobranca": r["cobranca"],
+            }
+            for r in linhas
+        ],
+        "limite": LIMITE_RESERVAS_FUTURAS_POR_UNIDADE,
+    }
+
+
+def cancelar_reserva(reserva_id, morador_id):
+    """Marca a reserva como cancelada e avisa o operacoes, que cancela a cobrança.
+
+    Não apaga nada: a reserva, a taxa e o evento ficam como histórico. O horário volta a ficar
+    livre na hora, e o limite da unidade deixa de contar esta reserva.
+    """
+    try:
+        reserva_id = int(reserva_id)
+    except (TypeError, ValueError):
+        raise ReservaRecusada("reserva_inexistente") from None
+
+    with conectar() as conexao, conexao.cursor() as cursor:
+        unidade_id = _unidade_do_morador(cursor, morador_id)
+        # Só a própria unidade: reserva de outra unidade responde igual a inexistente.
+        cursor.execute(
+            """SELECT r.id, r.data, r.periodo, a.nome, l.id AS lancamento_id
+               FROM reserva r
+               JOIN area_comum a ON a.id = r.area_comum_id
+               JOIN lancamento_financeiro l ON l.reserva_id = r.id
+               WHERE r.id = %s AND r.unidade_id = %s AND r.status = 'ativa'
+               FOR UPDATE""",
+            (reserva_id, unidade_id),
+        )
+        reserva = cursor.fetchone()
+        if reserva is None:
+            raise ReservaRecusada("reserva_inexistente")
+        if reserva["data"] < hoje():
+            raise ReservaRecusada("reserva_passada")
+
+        cursor.execute(
+            "UPDATE reserva SET status = 'cancelada', cancelada_em = CURRENT_TIMESTAMP WHERE id = %s",
+            (reserva_id,),
+        )
+        _gravar_evento(cursor, reserva_id, reserva["lancamento_id"], tipo="ReservaCancelada")
+        conexao.commit()
+
+    registrar(logging.INFO, "reserva cancelada", reserva_id=reserva_id)
+    eventos.publicar_pendentes()
+    return {
+        "reserva_id": reserva_id,
+        "area": reserva["nome"],
+        "data": reserva["data"].isoformat(),
+        "periodo": reserva["periodo"],
+        "cancelada": True,
     }
