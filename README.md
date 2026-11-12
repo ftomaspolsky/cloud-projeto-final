@@ -66,17 +66,25 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **Rebalanceamento por zona do ECS está ligado:** depois de uma substituição, o serviço volta a ter
   uma task por zona sozinho, uns 12 min depois de a instância nova entrar no cluster.
 
-**Onde paramos (11/11, ~15:05 UTC):** nada pendente na conta. As duas políticas foram recolocadas,
-as tasks estão uma por zona, há 2 instâncias, e os alarmes estão em OK.
+**Onde paramos (12/11, ~15:50 UTC):** as duas etapas estão de pé.
+
+- **Etapa 1, Ohio:** inalterada desde 11/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
+  `docs/arquitetura-ohio.png`.
+- **Etapa 2, São Paulo:** criada pelo Terraform em `infra/terraform/` (como rodar: o README de lá).
+  Provado em 12/11: `destroy` completo e `apply` do zero numa passada só, com 77 recursos em 15 min 52 s,
+  as imagens geradas e enviadas pelo próprio `apply`; depois, a conversa com o Haiku (perfil `global.`)
+  reservou, e o `operacoes` processou o evento com o mesmo `correlation_id`. Os 12 alarmes em OK.
+  Evidências em `docs/evidencias/2026-11-12-sp-*`.
 
 **Próximo passo:**
 
-1. Diagrama da arquitetura.
-2. Etapa 2, em São Paulo, com Terraform, escrito pelo agente e rodado pelo autor.
-3. Antes de apresentar: **apagar as reservas de teste** (12/12, 13/12 e 20/12). A unidade de demo está
-   no limite de 3 reservas futuras e recusa qualquer reserva nova com `limite_da_unidade`.
-4. Pequena correção para uma `v4`: a linha `evento publicado` sai com `correlation_id` `-`, porque o
-   publicador roda fora da requisição. O `correlation_id` da mensagem está certo.
+1. Antes de apresentar, em Ohio: **apagar as reservas de teste** (12/12, 13/12 e 20/12). A unidade de
+   demo está no limite de 3 reservas futuras e recusa qualquer reserva nova com `limite_da_unidade`.
+   Em São Paulo há 1 reserva de teste (churrasqueira, 15/12), que some no próximo `destroy`.
+2. Atualizar o resumo público (artefato) com a etapa 2.
+3. Pequena correção para uma `v4`: a linha `evento publicado` sai com `correlation_id` `-` quando o
+   publicador roda fora da requisição (a nova tentativa a cada 10 s). O `correlation_id` da mensagem
+   está certo.
 
 **Colar no CloudShell:** ele às vezes come o primeiro caractere de um bloco colado. Blocos longos
 começam por uma linha de comentário.

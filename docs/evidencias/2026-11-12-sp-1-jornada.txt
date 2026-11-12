@@ -1,0 +1,36 @@
+# Etapa 2, São Paulo: primeira jornada real pelo ALB (12/11, horários UTC)
+# Criado pelo terraform apply (54 + 22 recursos). Endereço do ALB omitido.
+
+## describe-services
+atendimento	2	2	arn:aws:ecs:sa-east-1:116979769772:task-definition/cloud-projeto-final-atendimento:1
+operacoes	1	1	arn:aws:ecs:sa-east-1:116979769772:task-definition/cloud-projeto-final-operacoes:1
+
+## instâncias do ASG
+i-02d03a0134424365b	sa-east-1a	InService
+i-0e084597c91e602a4	sa-east-1b	InService
+
+## RDS
+8.4.11	db.t4g.micro	True	sa-east-1b	sa-east-1a
+
+## logs com correlation_id sp-teste-2 (a conversa pediu a reserva)
+{"ts": "2026-11-12T14:45:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "modelo_respondeu", "rodada": 0, "parada": "tool_use", "tokens_entrada": 1094, "tokens_saida": 211, "latencia_ms": 3613}
+{"ts": "2026-11-12T14:45:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "reserva gravada", "reserva_id": 1, "lancamento_id": 1}
+{"ts": "2026-11-12T14:45:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "evento publicado", "evento_id": "e305a179-1192-412a-92e4-4ef90a6d82ca"}
+{"ts": "2026-11-12T14:45:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "ferramenta_executada", "ferramenta": "criar_reserva", "ok": true}
+{"ts": "2026-11-12T14:45:44", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "modelo_respondeu", "rodada": 1, "parada": "end_turn", "tokens_entrada": 1360, "tokens_saida": 101, "latencia_ms": 3735}
+{"ts": "2026-11-12T14:45:44", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-teste-2", "msg": "requisicao", "metodo": "POST", "rota": "/chat", "status": 200, "ms": 7642.8}
+{"ts": "2026-11-12T14:45:40", "nivel": "INFO", "servico": "operacoes", "msg": "evento processado", "evento_id": "e305a179-1192-412a-92e4-4ef90a6d82ca", "correlation_id": "sp-teste-2"}
+
+## alarmes
+OK	cloud-projeto-final-alb-5xx
+OK	cloud-projeto-final-alb-task-nao-saudavel
+OK	cloud-projeto-final-app-5xx
+OK	cloud-projeto-final-asg-abaixo-do-minimo
+OK	cloud-projeto-final-atendimento-abaixo-do-minimo
+OK	cloud-projeto-final-cluster-cpu-alta
+OK	cloud-projeto-final-dlq-com-mensagem
+OK	cloud-projeto-final-erros-atendimento
+OK	cloud-projeto-final-erros-operacoes
+OK	cloud-projeto-final-fila-mensagem-velha
+OK	cloud-projeto-final-operacoes-sem-task
+OK	cloud-projeto-final-tasks-sem-instancia

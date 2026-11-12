@@ -1,0 +1,40 @@
+# Etapa 2, São Paulo: destroy completo e apply do zero numa passada (12/11, horários UTC)
+
+## destroy (2ª tentativa, depois da correção das dependências)
+inicio 15:23:26
+Destroy complete! Resources: 35 destroyed.
+saida=0 fim 15:29:53
+
+## apply do zero
+inicio 15:31:15
+Plan: 77 to add, 0 to change, 0 to destroy.
+terraform_data.imagem["atendimento"] (local-exec): publicada: <conta>.dkr.ecr.sa-east-1.amazonaws.com/cloud-projeto-final/atendimento:e798a02ea7f9
+terraform_data.imagem["operacoes"] (local-exec): publicada: <conta>.dkr.ecr.sa-east-1.amazonaws.com/cloud-projeto-final/operacoes:a69a3854cefc
+aws_db_instance.principal: Creation complete after 15m8s [id=db-HMEPWOSG533PHSMJLNXHFLNI2A]
+Apply complete! Resources: 77 added, 0 changed, 0 destroyed.
+saida=0 fim 15:47:07
+
+## jornada pelo ALB novo: logs com correlation_id sp-limpo-2
+{"ts": "2026-11-12T15:48:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "modelo_respondeu", "rodada": 0, "parada": "tool_use", "tokens_entrada": 1093, "tokens_saida": 239, "latencia_ms": 1688}
+{"ts": "2026-11-12T15:48:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "reserva gravada", "reserva_id": 1, "lancamento_id": 1}
+{"ts": "2026-11-12T15:48:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "evento publicado", "evento_id": "b78a32c9-150d-41db-8c40-c09610b244f2"}
+{"ts": "2026-11-12T15:48:40", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "ferramenta_executada", "ferramenta": "criar_reserva", "ok": true}
+{"ts": "2026-11-12T15:48:41", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "modelo_respondeu", "rodada": 1, "parada": "end_turn", "tokens_entrada": 1387, "tokens_saida": 98, "latencia_ms": 1147}
+{"ts": "2026-11-12T15:48:41", "nivel": "INFO", "servico": "atendimento", "correlation_id": "sp-limpo-2", "msg": "requisicao", "metodo": "POST", "rota": "/chat", "status": 200, "ms": 3147.8}
+{"ts": "2026-11-12T15:48:40", "nivel": "INFO", "servico": "operacoes", "msg": "evento processado", "evento_id": "b78a32c9-150d-41db-8c40-c09610b244f2", "correlation_id": "sp-limpo-2"}
+
+## alarmes
+ALARM	cloud-projeto-final-atendimento-abaixo-do-minimo
+OK	cloud-projeto-final-alb-5xx
+OK	cloud-projeto-final-alb-task-nao-saudavel
+OK	cloud-projeto-final-app-5xx
+OK	cloud-projeto-final-asg-abaixo-do-minimo
+OK	cloud-projeto-final-cluster-cpu-alta
+OK	cloud-projeto-final-dlq-com-mensagem
+OK	cloud-projeto-final-erros-atendimento
+OK	cloud-projeto-final-erros-operacoes
+OK	cloud-projeto-final-fila-mensagem-velha
+OK	cloud-projeto-final-operacoes-sem-task
+OK	cloud-projeto-final-tasks-sem-instancia
+
+# 15:49:59 UTC: atendimento-abaixo-do-minimo voltou a OK (estava em ALARM porque o alarme nasceu antes das tasks). Os 12 em OK.
