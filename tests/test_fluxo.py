@@ -9,7 +9,7 @@ import random
 import threading
 import time
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 
 import boto3
 import pytest
@@ -110,7 +110,7 @@ def test_jornada_completa_da_conversa_ate_a_cobranca():
     assert resposta.headers["X-Correlation-Id"] == cid
     corpo = resposta.json()
     assert corpo["modo"] == "ia"
-    assert "reserva_id" in corpo["resposta"]
+    assert corpo["acoes"][0]["reserva_id"]
 
     assert contar("reserva") == 1
     assert consulta("SELECT valor FROM lancamento_financeiro")[0]["valor"] == 150
@@ -128,13 +128,13 @@ def test_jornada_completa_da_conversa_ate_a_cobranca():
 
 def test_consulta_real_mostra_o_que_esta_ocupado():
     data = data_futura()
-    livre = chat(f"o salão está livre em {data}?").json()["resposta"]
-    assert "noite" in livre
+    livre = chat(f"o salão está livre em {data}?").json()["disponibilidade"]
+    assert livre[0]["periodos_livres"] == ["manha", "tarde", "noite"]
     assert contar("reserva") == 0, "consultar não pode criar reserva"
 
     assert chat(f"reserva o salão em {data} à noite").status_code == 200
-    depois = chat(f"o salão está livre em {data}?").json()["resposta"]
-    assert '"periodos_livres": ["manha", "tarde"]' in depois
+    depois = chat(f"o salão está livre em {data}?").json()["disponibilidade"]
+    assert depois[0]["periodos_livres"] == ["manha", "tarde"]
 
 
 def test_horario_ocupado_e_recusado_sem_gravar_nada():
@@ -525,7 +525,7 @@ def test_consulta_por_intervalo_e_sem_area():
     assistente = requests.get(f"{MODELO}/_requisicoes", timeout=5).json()[1]["messages"][-2]
     pedidos = [b["toolUse"]["input"] for b in assistente["content"] if "toolUse" in b]
     assert pedidos == [{"data": amanha.isoformat(), "data_fim": depois.isoformat()}]
-    assert "Quadra" in corpo["resposta"] and depois.isoformat() in corpo["resposta"]
+    assert [(d["data"], d["area"]) for d in corpo["disponibilidade"]] == [(d["data"], d["area"]) for d in agenda]
     assert corpo["acoes"] == []
     assert contar("reserva") == 1, "consultar não pode criar reserva"
 
@@ -574,3 +574,42 @@ def test_minhas_reservas_mostra_a_referencia_do_pix():
 
     lista = requests.get(f"{ATENDIMENTO}/menu/minhas-reservas", timeout=10).json()["reservas"]
     assert lista[0]["referencia_pagamento"].startswith("PIX-")
+
+
+def test_chat_devolve_a_disponibilidade_consultada():
+    data = data_futura()
+    reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
+    corpo = chat(f"o salão está livre em {data}?").json()
+    dia = reservas.DIAS_DA_SEMANA[date.fromisoformat(data).weekday()]
+    assert corpo["disponibilidade"] == [
+        {"area": SALAO, "data": data, "dia_da_semana": dia, "periodos_livres": ["manha", "tarde"], "taxa": "150.00"}
+    ]
+    assert corpo["acoes"] == []
+
+    assert chat("bom dia").json()["disponibilidade"] == []
+    assert chat(f"reserva o salão em {data} à tarde").json()["disponibilidade"] == []
+
+
+def test_conversa_em_varios_passos_no_simulado():
+    """O simulado junta as respostas curtas do morador, como o modelo real."""
+    hoje = reservas.hoje()
+    sabado = hoje + timedelta(days=(5 - hoje.weekday() - 1) % 7 + 1)
+
+    primeira = chat("Churrasqueira").json()
+    conversa_id = primeira["conversa_id"]
+    assert primeira["resposta"] == "Para qual dia?"
+
+    segunda = chat("sábado", conversa_id=conversa_id).json()
+    assert [(d["area"], d["data"]) for d in segunda["disponibilidade"]] == [("Churrasqueira", sabado.isoformat())]
+    assert contar("reserva") == 0
+
+    # "20h" vira o período da noite, e área e dia vêm das mensagens anteriores.
+    terceira = chat("pode reservar às 20h", conversa_id=conversa_id).json()
+    assert terceira["acoes"] == [{
+        "reserva_id": consulta("SELECT id FROM reserva")[0]["id"],
+        "area": "Churrasqueira", "data": sabado.isoformat(), "periodo": "noite", "taxa": "80.00",
+    }]
+
+    # O texto que o botão de período da página manda.
+    quadra = chat(f"Reservar Quadra em {sabado.strftime('%d/%m/%Y')} de manhã").json()["acoes"]
+    assert [(a["area"], a["data"], a["periodo"]) for a in quadra] == [("Quadra", sabado.isoformat(), "manha")]

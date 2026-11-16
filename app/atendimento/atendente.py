@@ -136,6 +136,8 @@ class Resposta:
     modo: str
     # O que de fato foi reservado ou cancelado nesta mensagem, para a tela não depender do texto.
     acoes: list = field(default_factory=list)
+    # Os dias e áreas consultados, para a tela mostrar os períodos livres como botões.
+    disponibilidade: list = field(default_factory=list)
 
 
 def _calendario():
@@ -168,6 +170,12 @@ def _sistema(morador):
         "explique e pergunte se o morador quer cancelar a antiga primeiro. Se uma ferramenta "
         "recusar o pedido, explique o motivo em palavras simples e ofereça uma alternativa. "
         "Escreva datas como DD/MM/AAAA para o morador. "
+        "Faça no máximo uma pergunta por mensagem, sempre oferecendo as opções. Nunca pergunte o "
+        "que dá para descobrir consultando: se o morador disser a área e o dia, consulte e mostre "
+        "os períodos livres em vez de perguntar o período; se disser só o dia, consulte todas as "
+        "áreas. O morador pode responder com uma palavra só, como \"Quadra\", \"sábado\" ou "
+        "\"noite\": isso completa o pedido anterior. Horário em horas, como \"às 17h\", "
+        "converta para o período correspondente, pelos horários acima. "
         "Você ainda não abre ordem de serviço, não cuida de visitantes nem de encomendas e não "
         "trata de boletos ou da cota do condomínio. Se o morador pedir isso, diga que ainda não "
         "faz e oriente a procurar a administração, sem inventar resposta. "
@@ -236,6 +244,7 @@ def responder(historico, morador_id):
     sistema = _sistema(reservas.dados_do_morador(morador_id))
     mensagens = list(historico)
     reservas_feitas = []
+    disponibilidade = []
     inicio = time.monotonic()
 
     for rodada in range(MAX_RODADAS):
@@ -275,7 +284,7 @@ def responder(historico, morador_id):
             if not texto:
                 registrar(logging.ERROR, "modelo_falhou", erro_codigo=saida["stopReason"], rodada=rodada)
                 return _sem_modelo(reservas_feitas)
-            return Resposta(texto, IA, reservas_feitas)
+            return Resposta(texto, IA, reservas_feitas, disponibilidade)
 
         # A mensagem volta inteira, com os blocos de raciocínio: o modelo exige isso.
         mensagens.append(mensagem)
@@ -287,6 +296,8 @@ def responder(historico, morador_id):
             resultado, deu_certo = _executar(pedido["name"], pedido["input"], morador_id)
             if deu_certo and pedido["name"] in ("criar_reserva", "cancelar_reserva"):
                 reservas_feitas.append(resultado)
+            if deu_certo and pedido["name"] == "consultar_disponibilidade":
+                disponibilidade.extend(resultado["disponibilidade"])
             registrar(logging.INFO, "ferramenta_executada", ferramenta=pedido["name"], ok=deu_certo)
             resultados.append({
                 "toolResult": {

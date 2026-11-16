@@ -127,6 +127,7 @@ def chat(entrada: Mensagem):
         "resposta": resposta.texto,
         "modo": resposta.modo,
         "acoes": resposta.acoes,
+        "disponibilidade": resposta.disponibilidade,
     }
 
 
