@@ -319,7 +319,14 @@ def test_o_que_vai_para_o_modelo():
         for f in primeira["toolConfig"]["tools"]
         for campo in f["toolSpec"]["inputSchema"]["json"]["properties"]
     }
-    assert campos == {"area", "data", "periodo", "reserva_id"}
+    assert campos == {"area", "data", "data_fim", "periodo", "reserva_id"}
+
+    # O contexto vem do servidor: dia da semana, taxas e quem é o morador, lido do banco.
+    sistema = primeira["system"][0]["text"]
+    hoje = reservas.hoje()
+    assert f"Hoje é {hoje.isoformat()}, {reservas.DIAS_DA_SEMANA[hoje.weekday()]}" in sistema
+    assert "Salão de festas (taxa de R$ 150,00)" in sistema
+    assert "Morador Demo, da unidade 101" in sistema
 
     # A mensagem do assistente volta intacta, com o raciocínio, junto com o resultado.
     assistente, resultado = segunda["messages"][-2:]
@@ -492,3 +499,78 @@ def test_migracao_de_um_banco_da_v3():
     with pytest.raises(reservas.ReservaRecusada) as recusa:
         reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
     assert recusa.value.motivo == "horario_ocupado"
+
+
+# ---------------------------------------------------------------- v5: contexto, agenda e histórico
+
+def test_consulta_por_intervalo_e_sem_area():
+    amanha = reservas.hoje() + timedelta(days=1)
+    depois = amanha + timedelta(days=1)
+    reservas.criar_reserva(SALAO, amanha.isoformat(), "noite", banco.MORADOR_DEMO_ID)
+
+    agenda = reservas.consultar_agenda(amanha.isoformat(), depois.isoformat())["disponibilidade"]
+    # Três áreas em cada um dos dois dias, dia a dia.
+    assert [(d["data"], d["area"]) for d in agenda] == [
+        (dia.isoformat(), area) for dia in (amanha, depois) for area in banco.NOMES_DAS_AREAS
+    ]
+    livres = {(d["data"], d["area"]): d["periodos_livres"] for d in agenda}
+    assert livres[(amanha.isoformat(), SALAO)] == ["manha", "tarde"]
+    assert livres[(depois.isoformat(), SALAO)] == ["manha", "tarde", "noite"]
+    assert livres[(amanha.isoformat(), "Quadra")] == ["manha", "tarde", "noite"]
+    assert agenda[0]["dia_da_semana"] == reservas.DIAS_DA_SEMANA[amanha.weekday()]
+    assert agenda[0]["taxa"] == "150.00"
+
+    # Pelo chat: duas datas e nenhuma área viram uma consulta só, do intervalo inteiro.
+    corpo = chat(f"o que está livre entre {amanha} e {depois}?").json()
+    assistente = requests.get(f"{MODELO}/_requisicoes", timeout=5).json()[1]["messages"][-2]
+    pedidos = [b["toolUse"]["input"] for b in assistente["content"] if "toolUse" in b]
+    assert pedidos == [{"data": amanha.isoformat(), "data_fim": depois.isoformat()}]
+    assert "Quadra" in corpo["resposta"] and depois.isoformat() in corpo["resposta"]
+    assert corpo["acoes"] == []
+    assert contar("reserva") == 1, "consultar não pode criar reserva"
+
+
+@pytest.mark.parametrize("dias_ate_o_fim, motivo", [(14, "intervalo_muito_longo"), (-1, "data_invalida")])
+def test_intervalo_invalido_e_recusado(dias_ate_o_fim, motivo):
+    inicio = reservas.hoje() + timedelta(days=2)
+    fim = inicio + timedelta(days=dias_ate_o_fim)
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.consultar_agenda(inicio.isoformat(), fim.isoformat())
+    assert recusa.value.motivo == motivo
+    # 14 dias contando o primeiro ainda passa.
+    assert len(reservas.consultar_agenda(inicio.isoformat(), (inicio + timedelta(days=13)).isoformat(), SALAO)["disponibilidade"]) == 14
+
+
+def test_chat_devolve_as_acoes_feitas():
+    data = data_futura()
+    criada = chat(f"reserva o salão em {data} à noite").json()["acoes"]
+    reserva_id = consulta("SELECT id FROM reserva")[0]["id"]
+    assert criada == [{"reserva_id": reserva_id, "area": SALAO, "data": data, "periodo": "noite", "taxa": "150.00"}]
+
+    cancelada = chat(f"cancela a reserva {reserva_id}").json()["acoes"]
+    assert cancelada == [{"reserva_id": reserva_id, "area": SALAO, "data": data, "periodo": "noite", "cancelada": True}]
+
+    assert chat("bom dia").json()["acoes"] == []
+
+
+def test_historico_da_conversa():
+    conversa_id = chat("primeira mensagem").json()["conversa_id"]
+    chat("segunda mensagem", conversa_id=conversa_id)
+    chat("de outra conversa")
+
+    corpo = requests.get(f"{ATENDIMENTO}/chat/{conversa_id}", timeout=10).json()
+    assert corpo["conversa_id"] == conversa_id
+    assert [m["papel"] for m in corpo["mensagens"]] == ["user", "assistant", "user", "assistant"]
+    assert corpo["mensagens"][2]["texto"] == "segunda mensagem"
+
+    vazia = requests.get(f"{ATENDIMENTO}/chat/{uuid.uuid4()}", timeout=10)
+    assert vazia.status_code == 200 and vazia.json()["mensagens"] == []
+    assert requests.get(f"{ATENDIMENTO}/chat/nao-e-uuid", timeout=10).status_code == 422
+
+
+def test_minhas_reservas_mostra_a_referencia_do_pix():
+    reserva = reservar_pelo_menu()
+    assert esperar(lambda: status_do_lancamento(reserva["reserva_id"]) == "cobranca_gerada")
+
+    lista = requests.get(f"{ATENDIMENTO}/menu/minhas-reservas", timeout=10).json()["reservas"]
+    assert lista[0]["referencia_pagamento"].startswith("PIX-")

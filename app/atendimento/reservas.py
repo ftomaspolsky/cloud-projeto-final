@@ -14,7 +14,12 @@ from observabilidade import correlation_id, registrar
 ERRO_DUPLICADO = 1062
 LIMITE_RESERVAS_FUTURAS_POR_UNIDADE = 3
 MAXIMO_DIAS_ANTECEDENCIA = 180
+MAXIMO_DIAS_POR_CONSULTA = 14
 FUSO_DO_CONDOMINIO = timezone(timedelta(hours=-3))
+# Lista própria, na ordem do date.weekday(): o locale do container pode não ser português.
+DIAS_DA_SEMANA = [
+    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo",
+]
 
 
 class ReservaRecusada(Exception):
@@ -70,6 +75,42 @@ def consultar_disponibilidade(area, data):
         "periodos_livres": [p for p in PERIODOS if p not in ocupados],
         "taxa": str(encontrada["taxa"]),
     }
+
+
+def consultar_agenda(data, data_fim=None, area=None):
+    """Os períodos livres de uma área, ou de todas, em cada dia de um intervalo (inclusive)."""
+    inicio = _validar_data(data)
+    fim = _validar_data(data_fim) if data_fim else inicio
+    if fim < inicio:
+        raise ReservaRecusada("data_invalida")
+    if (fim - inicio).days + 1 > MAXIMO_DIAS_POR_CONSULTA:
+        raise ReservaRecusada("intervalo_muito_longo")
+
+    with conectar() as conexao, conexao.cursor() as cursor:
+        if area:
+            areas = [_buscar_area(cursor, area)]
+        else:
+            cursor.execute("SELECT id, nome, taxa FROM area_comum ORDER BY id")
+            areas = cursor.fetchall()
+        # Uma consulta só para o intervalo inteiro, em vez de uma por dia e área.
+        cursor.execute(
+            "SELECT area_comum_id, data, periodo FROM reserva WHERE data BETWEEN %s AND %s AND status = 'ativa'",
+            (inicio, fim),
+        )
+        ocupados = {(r["area_comum_id"], r["data"], r["periodo"]) for r in cursor.fetchall()}
+
+    disponibilidade = []
+    for dias in range((fim - inicio).days + 1):
+        dia = inicio + timedelta(days=dias)
+        for a in areas:
+            disponibilidade.append({
+                "area": a["nome"],
+                "data": dia.isoformat(),
+                "dia_da_semana": DIAS_DA_SEMANA[dia.weekday()],
+                "periodos_livres": [p for p in PERIODOS if (a["id"], dia, p) not in ocupados],
+                "taxa": str(a["taxa"]),
+            })
+    return {"disponibilidade": disponibilidade}
 
 
 def _gravar_reserva(cursor, area_id, unidade_id, morador_id, dia, periodo):
@@ -160,12 +201,26 @@ def _unidade_do_morador(cursor, morador_id):
     return morador["unidade_id"]
 
 
+def dados_do_morador(morador_id):
+    with conectar() as conexao, conexao.cursor() as cursor:
+        cursor.execute(
+            """SELECT m.nome, u.numero FROM morador m JOIN unidade u ON u.id = m.unidade_id
+               WHERE m.id = %s""",
+            (morador_id,),
+        )
+        morador = cursor.fetchone()
+    if morador is None:
+        raise ReservaRecusada("morador_inexistente")
+    return {"nome": morador["nome"], "unidade": morador["numero"]}
+
+
 def listar_minhas_reservas(morador_id):
     """As reservas ativas, de hoje em diante, da unidade do morador."""
     with conectar() as conexao, conexao.cursor() as cursor:
         unidade_id = _unidade_do_morador(cursor, morador_id)
         cursor.execute(
-            """SELECT r.id, a.nome, r.data, r.periodo, a.taxa, l.status AS cobranca
+            """SELECT r.id, a.nome, r.data, r.periodo, a.taxa, l.status AS cobranca,
+                      l.referencia_pagamento
                FROM reserva r
                JOIN area_comum a ON a.id = r.area_comum_id
                JOIN lancamento_financeiro l ON l.reserva_id = r.id
@@ -183,6 +238,8 @@ def listar_minhas_reservas(morador_id):
                 "periodo": r["periodo"],
                 "taxa": str(r["taxa"]),
                 "cobranca": r["cobranca"],
+                # Fica null até o operacoes gerar a cobrança.
+                "referencia_pagamento": r["referencia_pagamento"],
             }
             for r in linhas
         ],

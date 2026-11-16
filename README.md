@@ -106,6 +106,21 @@ automática de 05:08 tinha derrubado o chat de Ohio até as tasks serem reinicia
 deixou o banco indisponível por ~1 min, só durante a própria rotação, e o app voltou sozinho
 (`docs/evidencias/2026-11-12-sp-3-rotacao-da-senha.txt`).
 
+**v5 (16/11), só no repositório, ainda não publicada em Ohio nem em São Paulo:**
+
+- **Agente com mais contexto:** o prompt leva o dia da semana, o calendário dos próximos 14 dias, as
+  áreas com taxas, os horários dos períodos, as regras (limite e antecedência), o nome e a unidade do
+  morador (lidos pelo servidor) e o que está fora do escopo.
+- **Consulta por intervalo:** `consultar_disponibilidade` aceita área opcional e `data_fim` (até 14
+  dias), numa consulta SQL só. "O que está livre no fim de semana?" cabe numa rodada.
+- **API:** `POST /chat` devolve `acoes` (o que foi reservado ou cancelado), `GET /chat/{conversa_id}`
+  devolve o histórico, e "minhas reservas" traz a referência do PIX gerada pelo `operacoes`.
+- **Front-end:** painel "Minhas reservas" ao lado do chat, que mostra a cobrança passando de
+  "gerando" a "gerada"; cartão de confirmação; conversa que sobrevive ao recarregar; e o
+  `correlation_id` da última mensagem no rodapé, para buscar no CloudWatch.
+- **Testes locais:** 40 passando. **Sem prova na AWS:** o comportamento do Haiku real com o prompt e
+  a ferramenta novos só se vê depois de publicar.
+
 ## Arquitetura
 
 ```
@@ -158,6 +173,7 @@ docker compose --profile teste run --rm --build testes
 | `GET  /` | a página de chat |
 | `GET  /health` | health check |
 | `POST /chat` `{"mensagem": "reserva o salão em 2026-12-12 à noite"}` | conversa com o modelo |
+| `GET  /chat/{conversa_id}` | o histórico da conversa, para a página reabrir |
 | `GET  /menu/areas`, `GET /menu/disponibilidade`, `POST /menu/reservas` | o menu guiado, sem IA |
 
 Mande `X-Correlation-Id: <algo>` no cabeçalho e o mesmo id aparece no log do `operacoes`.

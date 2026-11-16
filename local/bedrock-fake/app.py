@@ -91,10 +91,19 @@ async def converse(model_id: str, request: Request):
     texto = " ".join(b["text"] for b in ultimo if "text" in b)
     area = procurar(AREAS, texto)
     periodo = procurar(PERIODOS, texto)
-    data = re.search(r"\d{4}-\d{2}-\d{2}", texto)
+    datas = re.findall(r"\d{4}-\d{2}-\d{2}", texto)
+    cancelar = re.search(r"cancel\w* a reserva (\d+)", texto, re.IGNORECASE)
 
-    if re.search("reserv", texto, re.IGNORECASE) and area and periodo and data:
-        return usar_ferramenta("criar_reserva", {"area": area, "data": data.group(), "periodo": periodo})
-    if re.search("livre|dispon", texto, re.IGNORECASE) and area and data:
-        return usar_ferramenta("consultar_disponibilidade", {"area": area, "data": data.group()})
+    if cancelar:
+        return usar_ferramenta("cancelar_reserva", {"reserva_id": int(cancelar.group(1))})
+    if re.search("reserv", texto, re.IGNORECASE) and area and periodo and datas:
+        return usar_ferramenta("criar_reserva", {"area": area, "data": datas[0], "periodo": periodo})
+    if re.search("livre|dispon", texto, re.IGNORECASE) and datas:
+        # Sem área, consulta todas; com duas datas, consulta o intervalo.
+        entrada = {"data": datas[0]}
+        if area:
+            entrada["area"] = area
+        if len(datas) > 1:
+            entrada["data_fim"] = datas[1]
+        return usar_ferramenta("consultar_disponibilidade", entrada)
     return resposta([RACIOCINIO, {"text": "Qual área, data e período você quer?"}], "end_turn")

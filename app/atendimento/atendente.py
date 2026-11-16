@@ -8,7 +8,8 @@ guiado, e a mensagem do morador já está gravada.
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import timedelta
 
 import boto3
 import pymysql
@@ -16,7 +17,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 import reservas
-from banco import NOMES_DAS_AREAS, PERIODOS
+from banco import AREAS, HORARIOS_DOS_PERIODOS, NOMES_DAS_AREAS, PERIODOS
 from observabilidade import registrar
 
 # O raciocínio do Haiku conta nesse limite: um valor baixo corta a resposta antes do texto.
@@ -46,12 +47,22 @@ FERRAMENTAS = {
         {
             "toolSpec": {
                 "name": "consultar_disponibilidade",
-                "description": "Lista os períodos livres de uma área comum numa data, e a taxa.",
+                "description": (
+                    "Lista os períodos livres e a taxa, por área e por dia. Sem área, traz todas "
+                    "as áreas. Com data_fim, traz cada dia de data até data_fim (inclusive, no "
+                    "máximo 14 dias)."
+                ),
                 "inputSchema": {
                     "json": {
                         "type": "object",
-                        "properties": _ENTRADA_COMUM,
-                        "required": ["area", "data"],
+                        "properties": {
+                            **_ENTRADA_COMUM,
+                            "data_fim": {
+                                "type": "string",
+                                "description": "Último dia da consulta, AAAA-MM-DD. Opcional.",
+                            },
+                        },
+                        "required": ["data"],
                         "additionalProperties": False,
                     }
                 },
@@ -123,20 +134,43 @@ TEXTO_DO_MENU = (
 class Resposta:
     texto: str
     modo: str
+    # O que de fato foi reservado ou cancelado nesta mensagem, para a tela não depender do texto.
+    acoes: list = field(default_factory=list)
 
 
-def _sistema():
+def _calendario():
+    # O modelo erra ao calcular "sábado que vem" de cabeça. Com o calendário escrito, ele só lê.
+    hoje = reservas.hoje()
+    dias = [hoje + timedelta(days=n) for n in range(reservas.MAXIMO_DIAS_POR_CONSULTA)]
+    return "; ".join(f"{d.isoformat()} {reservas.DIAS_DA_SEMANA[d.weekday()]}" for d in dias)
+
+
+def _sistema(morador):
+    hoje = reservas.hoje()
+    areas = ", ".join(f"{nome} (taxa de R$ {taxa.replace('.', ',')})" for _, nome, taxa in AREAS)
+    periodos = ", ".join(f"{p} ({h})" for p, h in HORARIOS_DOS_PERIODOS.items())
     return [{"text": (
         "Você é o atendente virtual de um condomínio e fala com um morador pelo chat. Responda "
         "sempre em português do Brasil, em mensagens curtas. "
-        f"Hoje é {reservas.hoje().isoformat()}. "
-        "As áreas são Salão de festas, Churrasqueira e Quadra. Use as ferramentas para consultar "
-        "a disponibilidade, criar reservas, listar as reservas do morador e cancelar. Nunca "
+        f"O morador é {morador['nome']}, da unidade {morador['unidade']}. "
+        f"Hoje é {hoje.isoformat()}, {reservas.DIAS_DA_SEMANA[hoje.weekday()]}. "
+        f"Próximos dias: {_calendario()}. "
+        f"As áreas são: {areas}. Os períodos são: {periodos}. Cada unidade pode ter até "
+        f"{reservas.LIMITE_RESERVAS_FUTURAS_POR_UNIDADE} reservas futuras, com até "
+        f"{reservas.MAXIMO_DIAS_ANTECEDENCIA} dias de antecedência. "
+        "Use as ferramentas para consultar a disponibilidade, criar reservas, listar as reservas "
+        "do morador e cancelar. A consulta aceita várias áreas e vários dias numa chamada só: "
+        "sem área, traz todas; com data_fim, traz o intervalo. Nunca "
         "afirme que um horário está livre, que uma reserva foi feita ou cancelada sem o "
-        "resultado da ferramenta. Se faltar a área, a data ou o período, pergunte. O período é "
-        "manha, tarde ou noite. Antes de cancelar, confirme com o morador qual reserva, pelo "
-        "número, área e data. Se uma ferramenta recusar o pedido, explique o motivo em palavras "
-        "simples e ofereça uma alternativa. Escreva datas como DD/MM/AAAA para o morador. "
+        "resultado da ferramenta. Se faltar a área, a data ou o período, pergunte. Antes de "
+        "cancelar, confirme com o morador qual reserva, pelo número, área e data. Para remarcar, "
+        "crie a reserva nova e só depois cancele a antiga; se o limite da unidade impedir, "
+        "explique e pergunte se o morador quer cancelar a antiga primeiro. Se uma ferramenta "
+        "recusar o pedido, explique o motivo em palavras simples e ofereça uma alternativa. "
+        "Escreva datas como DD/MM/AAAA para o morador. "
+        "Você ainda não abre ordem de serviço, não cuida de visitantes nem de encomendas e não "
+        "trata de boletos ou da cota do condomínio. Se o morador pedir isso, diga que ainda não "
+        "faz e oriente a procurar a administração, sem inventar resposta. "
         # O histórico guarda só o texto. Sem este aviso, o modelo lê a resposta anterior, não vê
         # a consulta que a sustentou e pede desculpas ao morador por um erro que não aconteceu.
         "As mensagens anteriores aparecem só como texto, sem as chamadas de ferramenta que as "
@@ -149,7 +183,10 @@ def _executar(nome, entrada, morador_id):
     """Devolve (resultado, deu_certo). Recusa da regra é resposta para o modelo, não falha nossa."""
     try:
         if nome == "consultar_disponibilidade":
-            return reservas.consultar_disponibilidade(entrada["area"], entrada["data"]), True
+            resultado = reservas.consultar_agenda(
+                entrada["data"], entrada.get("data_fim"), entrada.get("area")
+            )
+            return resultado, True
         if nome == "criar_reserva":
             resultado = reservas.criar_reserva(
                 entrada["area"], entrada["data"], entrada["periodo"], morador_id
@@ -185,7 +222,7 @@ def _sem_modelo(acoes_feitas):
     # Se a reserva já foi gravada (ou cancelada), mandar para o menu faria o morador repetir o
     # pedido e ouvir "horário ocupado" pela própria reserva. Melhor confirmar o que aconteceu.
     if acoes_feitas:
-        return Resposta(" ".join(_confirmacao(a) for a in acoes_feitas), IA)
+        return Resposta(" ".join(_confirmacao(a) for a in acoes_feitas), IA, acoes_feitas)
     return Resposta(TEXTO_DO_MENU, MENU)
 
 
@@ -195,6 +232,8 @@ def _texto_de(mensagem):
 
 
 def responder(historico, morador_id):
+    # Lido fora dos try abaixo: banco fora do ar não é falha do modelo, e a rota responde 503.
+    sistema = _sistema(reservas.dados_do_morador(morador_id))
     mensagens = list(historico)
     reservas_feitas = []
     inicio = time.monotonic()
@@ -206,7 +245,7 @@ def responder(historico, morador_id):
         try:
             saida = bedrock.converse(
                 modelId=os.environ["BEDROCK_MODEL_ID"],
-                system=_sistema(),
+                system=sistema,
                 messages=mensagens,
                 toolConfig=FERRAMENTAS,
                 inferenceConfig={"maxTokens": MAX_TOKENS},
@@ -236,7 +275,7 @@ def responder(historico, morador_id):
             if not texto:
                 registrar(logging.ERROR, "modelo_falhou", erro_codigo=saida["stopReason"], rodada=rodada)
                 return _sem_modelo(reservas_feitas)
-            return Resposta(texto, IA)
+            return Resposta(texto, IA, reservas_feitas)
 
         # A mensagem volta inteira, com os blocos de raciocínio: o modelo exige isso.
         mensagens.append(mensagem)

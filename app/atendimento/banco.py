@@ -31,6 +31,7 @@ AREAS = [
 ]
 NOMES_DAS_AREAS = [nome for _, nome, _ in AREAS]
 PERIODOS = ["manha", "tarde", "noite"]
+HORARIOS_DOS_PERIODOS = {"manha": "8h às 12h", "tarde": "13h às 18h", "noite": "19h às 23h"}
 
 TABELAS = [
     """CREATE TABLE IF NOT EXISTS condominio (
