@@ -24,7 +24,8 @@ import eventos
 import reservas
 from observabilidade import SERVICO, correlation_id, registrar
 
-LIMITE_HISTORICO = 20
+LIMITE_HISTORICO = 20  # o que vai para o modelo
+LIMITE_DA_TELA = 50  # o que a tela mostra ao reabrir a conversa
 PAGINA = Path(__file__).parent / "index.html"
 
 
@@ -121,7 +122,26 @@ def chat(entrada: Mensagem):
     _gravar_mensagem(conversa_id, "user", entrada.mensagem)
     resposta = atendente.responder(_carregar_historico(conversa_id), banco.MORADOR_DEMO_ID)
     _gravar_mensagem(conversa_id, "assistant", resposta.texto)
-    return {"conversa_id": conversa_id, "resposta": resposta.texto, "modo": resposta.modo}
+    return {
+        "conversa_id": conversa_id,
+        "resposta": resposta.texto,
+        "modo": resposta.modo,
+        "acoes": resposta.acoes,
+        "disponibilidade": resposta.disponibilidade,
+    }
+
+
+@app.get("/chat/{conversa_id}")
+def historico_da_conversa(conversa_id: uuid.UUID):
+    """Para a tela reabrir a conversa. Conversa sem mensagens devolve lista vazia, não 404."""
+    with banco.conectar() as conexao, conexao.cursor() as cursor:
+        cursor.execute(
+            """SELECT papel, texto FROM mensagem WHERE conversa_id = %s AND morador_id = %s
+               ORDER BY id DESC LIMIT %s""",
+            (str(conversa_id), banco.MORADOR_DEMO_ID, LIMITE_DA_TELA),
+        )
+        mensagens = list(reversed(cursor.fetchall()))
+    return {"conversa_id": str(conversa_id), "mensagens": mensagens}
 
 
 # O menu guiado: o caminho sem IA, para quando o modelo está fora do ar. Mesmas regras do chat.

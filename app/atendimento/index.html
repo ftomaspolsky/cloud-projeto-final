@@ -6,59 +6,227 @@
 <title>Atendente do condomínio</title>
 <link rel="icon" href="data:,">
 <style>
+  :root {
+    --fundo: #f5f5f7;
+    --superficie: #ffffff;
+    --texto: #1d1d1f;
+    --texto-suave: #6e6e73;
+    --destaque: #007aff;
+    --destaque-forte: #0062cc;
+    --destaque-claro: rgba(0, 122, 255, .1);
+    --verde: #34c759;
+    --verde-texto: #248a3d;
+    --verde-claro: rgba(52, 199, 89, .12);
+    --vermelho: #ff3b30;
+    --vermelho-texto: #d70015;
+    --vermelho-claro: rgba(255, 59, 48, .1);
+    --laranja-texto: #a05a00;
+    --laranja-claro: rgba(255, 149, 0, .12);
+    --balao: #e9e9eb;
+    --chip: rgba(120, 120, 128, .12);
+    --chip-forte: rgba(120, 120, 128, .2);
+    --linha: rgba(0, 0, 0, .08);
+    --sombra: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 24px rgba(0, 0, 0, .05);
+    --raio: 18px;
+    --toque: 34px;
+  }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
-  body { display: flex; flex-direction: column; max-width: 720px; margin: 0 auto; background: #efeae2; font: 15px/1.45 system-ui, sans-serif; color: #111b21; }
-  header { background: #075e54; color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
-  header .avatar { width: 38px; height: 38px; border-radius: 50%; background: #25d366; display: grid; place-items: center; font-size: 20px; flex: none; }
-  header strong { display: block; font-size: 16px; }
-  header small { opacity: .85; }
-  #conversa { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .balao { max-width: 85%; padding: 8px 12px; border-radius: 10px; overflow-wrap: anywhere; background: #fff; align-self: flex-start; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+  body {
+    display: flex; flex-direction: column; height: 100dvh; background: var(--fundo); color: var(--texto);
+    font: 15px/1.47 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, strong { letter-spacing: -.01em; }
+  :focus-visible { outline: 3px solid rgba(0, 122, 255, .45); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px;
+    background: rgba(255, 255, 255, .72); border-bottom: 1px solid var(--linha);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo { width: 32px; height: 32px; flex: none; padding: 6px; border-radius: 9px; background: var(--destaque); color: #fff; }
+  .marca div { min-width: 0; }
+  .marca h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .marca small { display: block; color: var(--texto-suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  button, select, input { font: inherit; color: inherit; }
+  button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--toque);
+    padding: 6px 16px; border: 0; border-radius: 999px; background: var(--destaque); color: #fff;
+    font-weight: 500; cursor: pointer; transition: background-color .15s, transform .15s, opacity .15s;
+  }
+  button:hover:not(:disabled) { background: var(--destaque-forte); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.secundario { background: var(--chip); color: var(--texto); }
+  button.secundario:hover:not(:disabled) { background: var(--chip-forte); }
+  button.link { min-height: 0; padding: 0; background: none; color: var(--destaque); font-size: inherit; font-weight: 400; }
+  button.link:hover:not(:disabled) { background: none; text-decoration: underline; }
+  select, input { min-height: 40px; padding: 8px 12px; border: 1px solid var(--linha); border-radius: 12px; background: var(--fundo); }
+  #nova svg, #enviar svg { width: 18px; height: 18px; }
+
+  .app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px; }
+  .chat, #painel { min-height: 0; display: flex; flex-direction: column; background: var(--superficie); border-radius: 20px; box-shadow: var(--sombra); overflow: hidden; }
+
+  #conversa { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .balao { max-width: 78%; padding: 8px 14px; border-radius: var(--raio); background: var(--balao); align-self: flex-start; overflow-wrap: anywhere; }
   .balao p { margin: 0 0 6px; } .balao p:last-child { margin: 0; }
   .balao ul { margin: 4px 0; padding-left: 20px; }
-  .balao.morador { background: #d9fdd3; align-self: flex-end; white-space: pre-wrap; }
-  .balao.sistema { background: #fff3c4; align-self: center; text-align: center; }
-  .balao.digitando { color: #667781; font-style: italic; }
-  .sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .chip { background: #fff; color: #075e54; border: 1px solid #075e54; border-radius: 16px; padding: 5px 12px; font-size: 14px; cursor: pointer; white-space: nowrap; }
-  .chip:hover { background: #e7f5f2; }
-  .painel { background: #fff; padding: 12px; border-radius: 10px; align-self: stretch; display: grid; gap: 10px; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
-  .painel h3 { margin: 0; font-size: 15px; }
-  .painel label { display: grid; gap: 2px; font-size: 13px; color: #3b4a54; }
-  .cartao { border: 1px solid #d1d7db; border-left: 4px solid #25d366; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .cartao .info small { display: block; color: #667781; }
-  .cartao button.perigo { background: #fff; color: #b3261e; border: 1px solid #b3261e; }
-  .cartao button.perigo.confirmar { background: #b3261e; color: #fff; }
-  .vazio { color: #667781; }
-  select, input, button { font: inherit; padding: 8px; border: 1px solid #c8c8c8; border-radius: 6px; }
-  button { background: #075e54; color: #fff; border: 0; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-  #atalhos { display: flex; gap: 6px; padding: 8px 10px 0; background: #f0f2f5; overflow-x: auto; }
-  form#envio { display: flex; gap: 8px; padding: 8px 10px 10px; background: #f0f2f5; }
-  form#envio input { flex: 1; min-width: 0; }
+  .balao.morador { background: var(--destaque); color: #fff; align-self: flex-end; white-space: pre-wrap; }
+  .balao.sistema { max-width: 90%; background: var(--laranja-claro); color: var(--laranja-texto); align-self: center; text-align: center; font-size: 14px; }
+  .balao.digitando { display: inline-flex; gap: 5px; padding: 13px 16px; }
+  .digitando span:not(.sr) { width: 7px; height: 7px; border-radius: 50%; background: var(--texto-suave); animation: pulo 1.2s infinite ease-in-out; }
+  .digitando span:nth-child(3) { animation-delay: .15s; }
+  .digitando span:nth-child(4) { animation-delay: .3s; }
+  @keyframes pulo { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+
+  .sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { min-height: var(--toque); padding: 6px 14px; font-size: 14px; }
+  .sugestoes .chip { background: var(--superficie); color: var(--destaque); }
+  .sugestoes .chip:hover:not(:disabled) { background: rgba(255, 255, 255, .7); }
+
+  /* Respostas de um toque: só a última resposta do atendente tem. */
+  .rapidas { align-self: flex-start; display: grid; gap: 8px; margin: 2px 0 4px; max-width: 100%; }
+  .rapidas .grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .rotulo-grupo { width: 100%; font-size: 12px; color: var(--texto-suave); }
+
+  .cartao { align-self: flex-start; width: min(100%, 400px); padding: 14px 16px; border: 1px solid var(--linha); border-radius: 16px; background: var(--superficie); box-shadow: var(--sombra); }
+  .confirmacao strong { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .confirmacao strong::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--verde); }
+  .confirmacao.cancelada strong::before { background: var(--vermelho); }
+  .confirmacao dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 14px; }
+  .confirmacao dt { color: var(--texto-suave); }
+  .confirmacao dd { margin: 0; }
+  .confirmacao small { display: block; margin-top: 8px; color: var(--texto-suave); }
+
+  .agenda h4 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .agenda h4:not(:first-child) { margin-top: 14px; }
+  .linha-area { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--linha); }
+  .linha-area div:first-child { min-width: 0; }
+  .linha-area small { display: block; color: var(--texto-suave); font-size: 12px; }
+  .periodos { display: flex; flex-wrap: wrap; gap: 6px; }
+  .periodos button { min-height: 30px; padding: 4px 12px; font-size: 13px; background: var(--destaque-claro); color: var(--destaque); }
+  .periodos button:hover:not(:disabled) { background: rgba(0, 122, 255, .18); }
+  .periodos .ocupado { display: inline-flex; align-items: center; min-height: 30px; padding: 4px 12px; font-size: 13px; color: var(--texto-suave); opacity: .45; text-decoration: line-through; }
+  .sem-horario { font-size: 13px; color: var(--texto-suave); }
+  .mais-dias { margin: 10px 0 0; font-size: 13px; color: var(--texto-suave); }
+
+  .formulario { align-self: stretch; width: auto; display: grid; gap: 12px; }
+  .formulario h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .formulario label { display: grid; gap: 4px; font-size: 13px; color: var(--texto-suave); }
+  .formulario select, .formulario input { color: var(--texto); }
+
+  .compositor { padding: 10px 16px 12px; border-top: 1px solid var(--linha); }
+  #atalhos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  form#envio { display: flex; align-items: center; gap: 8px; }
+  form#envio input { flex: 1; min-width: 0; min-height: 40px; padding: 8px 16px; border-radius: 999px; background: var(--superficie); }
+  #enviar { flex: none; width: 36px; min-height: 36px; height: 36px; padding: 0; }
+  #rodape { margin-top: 8px; font-size: 11px; color: var(--texto-suave); }
+  #rodape code { font-size: 11px; }
+
+  .painel-topo { display: flex; align-items: center; gap: 8px; padding: 20px 20px 4px; }
+  .painel-topo h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.02em; flex: 1; }
+  .contador { padding: 2px 10px; border-radius: 999px; background: var(--chip); color: var(--texto-suave); font-size: 13px; font-weight: 500; }
+  .nota { margin: 0; padding: 0 20px 12px; font-size: 13px; color: var(--texto-suave); }
+  #lista-reservas { flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 4px 16px 16px; list-style: none; display: grid; align-content: start; gap: 10px; }
+  .reserva { display: grid; gap: 2px; padding: 14px; border-radius: 14px; background: var(--fundo); }
+  .reserva strong { font-weight: 600; }
+  .reserva .detalhe { font-size: 13px; color: var(--texto-suave); }
+  .situacao { justify-self: start; margin-top: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--laranja-claro); color: var(--laranja-texto); }
+  .situacao.gerada { background: var(--verde-claro); color: var(--verde-texto); }
+  .reserva button { justify-self: start; margin-top: 10px; min-height: 30px; padding: 4px 14px; font-size: 13px; background: var(--chip); color: var(--vermelho-texto); }
+  .reserva button:hover:not(:disabled) { background: var(--vermelho-claro); }
+  .reserva button.confirmar, .reserva button.confirmar:hover:not(:disabled) { background: var(--vermelho); color: #fff; }
+  .vazio { color: var(--texto-suave); font-size: 14px; }
+
+  @media (min-width: 900px) { .so-celular { display: none !important; } }
+  @media (max-width: 899px) {
+    :root { --toque: 40px; }
+    header { padding: 8px 16px; }
+    #nova { width: 40px; padding: 0; flex: none; }
+    #nova .rotulo { display: none; }
+    .app { display: flex; padding: 0; }
+    .chat { flex: 1; border-radius: 0; box-shadow: none; }
+    #conversa { padding: 16px; }
+    .balao { max-width: 85%; }
+    .compositor { padding: 8px 12px 12px; }
+    #enviar { width: 40px; height: 40px; min-height: 40px; }
+    .periodos button, .periodos .ocupado, .reserva button { min-height: 40px; }
+    #painel { display: none; position: fixed; inset: 0; z-index: 10; border-radius: 0; box-shadow: none; }
+    #painel.aberto { display: flex; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; }
+    .digitando span:not(.sr) { animation: none; opacity: .6; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <div class="avatar" aria-hidden="true">🏢</div>
-  <div><strong>Atendente do condomínio</strong><small>Residencial Exemplo · unidade 101 · reservas de áreas comuns</small></div>
+  <div class="marca">
+    <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 21V4h11v17M15 9h5v12M2 21h20M8 8h3M8 12h3M8 16h3"/>
+    </svg>
+    <div><h1>Atendente do condomínio</h1><small>Residencial Exemplo · unidade 101</small></div>
+  </div>
+  <button type="button" id="nova" class="secundario" aria-label="Nova conversa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>
+    </svg>
+    <span class="rotulo">Nova conversa</span>
+  </button>
 </header>
-<main id="conversa" aria-live="polite"></main>
-<nav id="atalhos" aria-label="Atalhos">
-  <button type="button" class="chip" data-acao="minhas">📋 Minhas reservas</button>
-  <button type="button" class="chip" data-acao="formulario">📝 Reservar pelo formulário</button>
-  <button type="button" class="chip" data-texto="Quais áreas posso reservar e quanto custa cada uma?">🏷️ Áreas e taxas</button>
-</nav>
-<form id="envio">
-  <input id="texto" maxlength="2000" autocomplete="off" required placeholder="Escreva aqui. Ex.: a churrasqueira está livre sábado à noite?" aria-label="Mensagem">
-  <button id="enviar">Enviar</button>
-</form>
+
+<div class="app">
+  <section class="chat" aria-label="Conversa com o atendente">
+    <div id="conversa" role="log" aria-live="polite"></div>
+    <div class="compositor">
+      <nav id="atalhos" aria-label="Atalhos">
+        <button type="button" class="chip secundario so-celular" data-acao="minhas">Minhas reservas</button>
+        <button type="button" class="chip secundario" data-acao="formulario">Reservar pelo formulário</button>
+        <button type="button" class="chip secundario" data-texto="Quais áreas posso reservar e quanto custa cada uma?">Áreas e taxas</button>
+      </nav>
+      <form id="envio">
+        <input id="texto" maxlength="2000" autocomplete="off" required placeholder="Mensagem" aria-label="Mensagem">
+        <button id="enviar" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+        </button>
+      </form>
+      <div id="rodape" hidden>ID da última mensagem: <code id="cid"></code> · <button type="button" id="copiar" class="link">copiar</button></div>
+    </div>
+  </section>
+
+  <aside id="painel" aria-labelledby="titulo-painel">
+    <div class="painel-topo">
+      <h2 id="titulo-painel">Minhas reservas</h2>
+      <span id="contador" class="contador"></span>
+      <button type="button" id="fechar" class="secundario so-celular">Fechar</button>
+    </div>
+    <p class="nota">A cobrança via PIX é gerada logo depois de cada reserva.</p>
+    <ul id="lista-reservas" aria-live="polite"></ul>
+  </aside>
+</div>
+
 <script>
   const conversa = document.getElementById("conversa");
   const texto = document.getElementById("texto");
   const enviar = document.getElementById("enviar");
+  const nova = document.getElementById("nova");
+  const painel = document.getElementById("painel");
+  const listaReservas = document.getElementById("lista-reservas");
+  const contador = document.getElementById("contador");
+  const PERIODOS = ["manha", "tarde", "noite"];
   const NOMES_DOS_PERIODOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite" };
+  // Como o período entra na frase que o botão manda: "Reservar Quadra em 21/11/2026 à noite".
+  const PERIODO_NA_FRASE = { manha: "de manhã", tarde: "à tarde", noite: "à noite" };
+  const MAXIMO_DIAS_NO_CARTAO = 7;
   const MOTIVOS = {
     limite_da_unidade: "Sua unidade já tem 3 reservas futuras, que é o limite. Cancele uma em “Minhas reservas” para reservar outra.",
     horario_ocupado: "Esse horário já está reservado. Escolha outra data ou outro período.",
@@ -69,14 +237,37 @@
     area_inexistente: "Essa área não existe no condomínio.",
     reserva_inexistente: "Não encontrei essa reserva entre as suas reservas ativas.",
     reserva_passada: "Essa reserva já aconteceu e não pode mais ser cancelada.",
+    intervalo_muito_longo: "O intervalo de datas é longo demais. Consulte um período menor.",
     sistema_indisponivel: "O sistema está indisponível. Tente de novo em instantes.",
   };
-  let conversaId = null;
+  const CHAVE_DA_CONVERSA = "conversa_id";
+  let conversaId = null, enviando = false, areasEPeriodos = null;
 
   function rolar() { conversa.scrollTop = conversa.scrollHeight; }
   function reais(valor) { return "R$ " + Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
-  function dataBR(iso) { const [a, m, d] = iso.split("-"); return `${d}/${m}/${a}`; }
+  function dataBR(iso) { if (typeof iso !== "string") return "—"; const [a, m, d] = iso.split("-"); return `${d}/${m}/${a}`; }
+  function periodo(p) { return NOMES_DOS_PERIODOS[p] || p || "—"; }
   function motivo(corpo) { return MOTIVOS[corpo.recusada || corpo.erro] || "Não foi possível concluir o pedido."; }
+  function semAcento(t) { return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+  // O ALB pode responder 502/504 com HTML: aí não há JSON para ler.
+  async function lerJson(resposta) { try { return await resposta.json(); } catch { return {}; } }
+
+  // Áreas e períodos mudam pouco: busca uma vez e guarda. Se falhar, tenta de novo na próxima.
+  async function buscarAreas() {
+    if (areasEPeriodos) return areasEPeriodos;
+    try {
+      const resposta = await fetch("/menu/areas");
+      const corpo = resposta.ok ? await lerJson(resposta) : {};
+      if (Array.isArray(corpo.areas)) areasEPeriodos = corpo;
+    } catch {}
+    return areasEPeriodos;
+  }
+
+  // A conversa sobrevive ao recarregar a página. localStorage pode estar bloqueado: por isso o try.
+  function lerConversaGuardada() { try { return localStorage.getItem(CHAVE_DA_CONVERSA); } catch { return null; } }
+  function guardarConversa(id) {
+    try { if (id) localStorage.setItem(CHAVE_DA_CONVERSA, id); else localStorage.removeItem(CHAVE_DA_CONVERSA); } catch {}
+  }
 
   // Negrito e listas simples, a partir de texto já escapado: nada do modelo vira HTML.
   function formatar(conteudo) {
@@ -106,10 +297,137 @@
     return elemento;
   }
 
+  function digitando() {
+    const elemento = document.createElement("div");
+    elemento.className = "balao digitando";
+    elemento.innerHTML = '<span class="sr">O atendente está digitando</span><span></span><span></span><span></span>';
+    conversa.appendChild(elemento);
+    rolar();
+    return elemento;
+  }
+
+  // Cartão de reserva confirmada ou cancelada: serve ao chat, ao formulário e ao painel.
+  function cartaoConfirmacao(acao) {
+    const cancelada = acao.cancelada === true;
+    const cartao = document.createElement("div");
+    cartao.className = "cartao confirmacao" + (cancelada ? " cancelada" : "");
+    const titulo = document.createElement("strong");
+    titulo.textContent = cancelada ? "Reserva cancelada" : "Reserva confirmada";
+    const linhas = [["Área", acao.area], ["Data", dataBR(acao.data)], ["Período", periodo(acao.periodo)]];
+    if (!cancelada && acao.taxa != null) linhas.push(["Taxa", reais(acao.taxa)]);
+    linhas.push(["Número", acao.reserva_id]);
+    const lista = document.createElement("dl");
+    for (const [rotulo, valor] of linhas) {
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = rotulo;
+      dd.textContent = String(valor ?? "—");
+      lista.append(dt, dd);
+    }
+    cartao.append(titulo, lista);
+    if (cancelada) {
+      const nota = document.createElement("small");
+      nota.textContent = "A taxa também foi cancelada.";
+      cartao.appendChild(nota);
+    }
+    conversa.appendChild(cartao);
+    rolar();
+  }
+
+  // Cartão dos horários consultados: um bloco por dia, uma linha por área, um botão por período livre.
+  function cartaoDisponibilidade(itens) {
+    const porDia = new Map();
+    for (const item of itens) {
+      if (!porDia.has(item.data)) porDia.set(item.data, []);
+      porDia.get(item.data).push(item);
+    }
+    const cartao = document.createElement("div");
+    cartao.className = "cartao agenda";
+    const dias = [...porDia.keys()];
+    for (const dia of dias.slice(0, MAXIMO_DIAS_NO_CARTAO)) {
+      const doDia = porDia.get(dia);
+      const semana = String(doDia[0].dia_da_semana || "");
+      const titulo = document.createElement("h4");
+      titulo.textContent = `${semana.charAt(0).toUpperCase()}${semana.slice(1)}, ${dataBR(dia).slice(0, 5)}`;
+      cartao.appendChild(titulo);
+      for (const item of doDia) {
+        const linha = document.createElement("div");
+        linha.className = "linha-area";
+        const nome = document.createElement("div");
+        nome.textContent = item.area;
+        const taxa = document.createElement("small");
+        taxa.textContent = reais(item.taxa);
+        nome.appendChild(taxa);
+        const periodos = document.createElement("div");
+        periodos.className = "periodos";
+        const livres = Array.isArray(item.periodos_livres) ? item.periodos_livres : [];
+        if (!livres.length) {
+          const nada = document.createElement("span");
+          nada.className = "sem-horario";
+          nada.textContent = "sem horário livre";
+          periodos.appendChild(nada);
+        }
+        for (const p of livres.length ? PERIODOS : []) {
+          if (livres.includes(p)) {
+            periodos.appendChild(chip(periodo(p), () =>
+              mandar(`Reservar ${item.area} em ${dataBR(item.data)} ${PERIODO_NA_FRASE[p]}`)));
+          } else {
+            const ocupado = document.createElement("span");
+            ocupado.className = "ocupado";
+            ocupado.textContent = periodo(p);
+            ocupado.title = "Ocupado";
+            periodos.appendChild(ocupado);
+          }
+        }
+        linha.append(nome, periodos);
+        cartao.appendChild(linha);
+      }
+    }
+    if (dias.length > MAXIMO_DIAS_NO_CARTAO) {
+      const mais = document.createElement("p");
+      mais.className = "mais-dias";
+      const resto = dias.length - MAXIMO_DIAS_NO_CARTAO;
+      mais.textContent = `e mais ${resto} ${resto === 1 ? "dia" : "dias"}`;
+      cartao.appendChild(mais);
+    }
+    conversa.appendChild(cartao);
+    rolar();
+  }
+
+  // Atalhos para responder a uma pergunta do atendente com um toque, pelas palavras da pergunta.
+  async function respostasRapidas(resposta) {
+    const t = semAcento(resposta);
+    if (!t.includes("?")) return;
+    const caixa = document.createElement("div");
+    caixa.className = "rapidas";
+    conversa.appendChild(caixa);
+    const grupo = (rotulo, opcoes) => {
+      const linha = document.createElement("div");
+      linha.className = "grupo";
+      const legenda = document.createElement("span");
+      legenda.className = "rotulo-grupo";
+      legenda.textContent = rotulo;
+      linha.appendChild(legenda);
+      for (const opcao of opcoes) linha.appendChild(chip(opcao, () => mandar(opcao)));
+      caixa.appendChild(linha);
+    };
+    const querArea = /\barea/.test(t);
+    const querDia = /\b(data|dias?|quando)\b/.test(t);
+    const querPeriodo = /\b(periodo|horario)/.test(t);
+    if (querArea) {
+      const corpo = await buscarAreas();
+      if (corpo) grupo("Área", corpo.areas.map(a => a.nome));
+    }
+    if (querDia) grupo("Dia", ["Hoje", "Amanhã", "Sábado", "Domingo"]);
+    if (querPeriodo) grupo("Período", PERIODOS.map(periodo));
+    if (!caixa.children.length) caixa.remove();
+    rolar();
+  }
+
   function chip(rotulo, aoClicar) {
     const botao = document.createElement("button");
     botao.type = "button";
-    botao.className = "chip";
+    botao.className = "chip secundario";
     botao.textContent = rotulo;
     botao.addEventListener("click", aoClicar);
     return botao;
@@ -130,136 +448,253 @@
 
   async function mostrarMenu() {
     document.getElementById("menu")?.remove();
-    const resposta = await fetch("/menu/areas");
-    if (!resposta.ok) { balao(MOTIVOS.sistema_indisponivel, "sistema"); return; }
-    const { areas, periodos } = await resposta.json();
+    const corpo = await buscarAreas();
+    if (!corpo) { balao(MOTIVOS.sistema_indisponivel, "sistema"); return; }
 
-    const area = opcoes(areas.map(a => [a.nome, `${a.nome} (${reais(a.taxa)})`]));
+    const area = opcoes(corpo.areas.map(a => [a.nome, `${a.nome} (${reais(a.taxa)})`]));
     const data = document.createElement("input");
     data.type = "date";
     data.required = true;
     data.min = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
-    const periodo = opcoes(periodos.map(p => [p, NOMES_DOS_PERIODOS[p] || p]));
+    const periodoEscolhido = opcoes(corpo.periodos.map(p => [p, periodo(p)]));
     const botao = document.createElement("button");
     botao.textContent = "Reservar";
 
     const menu = document.createElement("form");
     menu.id = "menu";
-    menu.className = "painel";
+    menu.className = "cartao formulario";
     const titulo = document.createElement("h3");
     titulo.textContent = "Reservar pelo formulário";
-    menu.append(titulo, campo("Área", area), campo("Data", data), campo("Período", periodo), botao);
+    menu.append(titulo, campo("Área", area), campo("Data", data), campo("Período", periodoEscolhido), botao);
     menu.addEventListener("submit", async evento => {
       evento.preventDefault();
       botao.disabled = true;
-      const resultado = await fetch("/menu/reservas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ area: area.value, data: data.value, periodo: periodo.value }),
-      });
-      const corpo = await resultado.json();
-      if (resultado.ok) {
-        balao(`✅ **Reserva confirmada**\n- ${corpo.area}\n- ${dataBR(corpo.data)}, ${NOMES_DOS_PERIODOS[corpo.periodo]}\n- Taxa de ${reais(corpo.taxa)}\n- Número da reserva: ${corpo.reserva_id}`);
-        menu.remove();
-      } else {
-        balao(motivo(corpo), "sistema");
-        botao.disabled = false;
+      try {
+        const resultado = await fetch("/menu/reservas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ area: area.value, data: data.value, periodo: periodoEscolhido.value }),
+        });
+        const reserva = await lerJson(resultado);
+        if (resultado.ok) {
+          menu.remove();
+          cartaoConfirmacao(reserva);
+          atualizarReservas();
+          return;
+        }
+        balao(motivo(reserva), "sistema");
+      } catch {
+        balao("Sem conexão com o sistema. Tente de novo.", "sistema");
       }
+      botao.disabled = false;
     });
     conversa.appendChild(menu);
     rolar();
   }
 
-  async function mostrarMinhasReservas() {
-    document.getElementById("minhas")?.remove();
-    const resposta = await fetch("/menu/minhas-reservas");
-    if (!resposta.ok) { balao(MOTIVOS.sistema_indisponivel, "sistema"); return; }
-    const { reservas, limite } = await resposta.json();
+  // Painel "Minhas reservas". Enquanto houver cobrança pendente, recarrega a cada 3 s (até 10 vezes)
+  // para mostrar o serviço de operações gerando a cobrança do outro lado da fila.
+  let tentativas = 0, temporizador = null, cancelandoId = null;
 
-    const painel = document.createElement("section");
-    painel.id = "minhas";
-    painel.className = "painel";
-    const titulo = document.createElement("h3");
-    const atualizarTitulo = () => {
-      titulo.textContent = `Minhas reservas (${painel.querySelectorAll(".cartao").length} de ${limite} possíveis)`;
-    };
-    painel.appendChild(titulo);
+  function atualizarReservas() { tentativas = 0; carregarReservas(); }
 
-    if (!reservas.length) {
-      const vazio = document.createElement("div");
+  async function carregarReservas() {
+    clearTimeout(temporizador);
+    let corpo = {};
+    try { const resposta = await fetch("/menu/minhas-reservas"); if (resposta.ok) corpo = await lerJson(resposta); } catch {}
+    if (!Array.isArray(corpo.reservas)) {
+      const aviso = document.createElement("li");
+      aviso.className = "vazio";
+      aviso.textContent = "Não foi possível carregar suas reservas agora.";
+      listaReservas.replaceChildren(aviso);
+      return;
+    }
+    renderizarReservas(corpo.reservas, corpo.limite || 3);
+    if (corpo.reservas.some(r => r.cobranca === "pendente") && tentativas < 10) {
+      tentativas++;
+      temporizador = setTimeout(carregarReservas, 3000);
+    }
+  }
+
+  function renderizarReservas(reservas, limite) {
+    const ativas = reservas.filter(r => r.cobranca !== "cancelado");
+    contador.textContent = `${ativas.length} de ${limite}`;
+    listaReservas.replaceChildren();
+    if (!ativas.length) {
+      const vazio = document.createElement("li");
       vazio.className = "vazio";
       vazio.textContent = "Nenhuma reserva futura. Que tal reservar uma área?";
-      painel.appendChild(vazio);
+      listaReservas.appendChild(vazio);
     }
-    for (const r of reservas) {
-      const cartao = document.createElement("div");
-      cartao.className = "cartao";
-      const info = document.createElement("div");
-      info.className = "info";
+    for (const r of ativas) {
+      const item = document.createElement("li");
+      item.className = "reserva";
       const nome = document.createElement("strong");
-      nome.textContent = `${r.area} · ${dataBR(r.data)} · ${NOMES_DOS_PERIODOS[r.periodo]}`;
-      const detalhe = document.createElement("small");
-      detalhe.textContent =
-        `Reserva nº ${r.reserva_id} · ${reais(r.taxa)} · ${r.cobranca === "cobranca_gerada" ? "cobrança gerada" : "cobrança em processamento"}`;
-      info.append(nome, detalhe);
+      nome.textContent = r.area;
+      const quando = document.createElement("div");
+      quando.textContent = `${dataBR(r.data)} · ${periodo(r.periodo)}`;
+      const detalhe = document.createElement("div");
+      detalhe.className = "detalhe";
+      detalhe.textContent = `Reserva nº ${r.reserva_id} · ${reais(r.taxa)}`;
+      const situacao = document.createElement("span");
+      const gerada = r.cobranca === "cobranca_gerada";
+      situacao.className = "situacao" + (gerada ? " gerada" : "");
+      situacao.textContent = gerada ? "Cobrança gerada" : "Gerando cobrança…";
+      item.append(nome, quando, detalhe, situacao);
+      if (r.referencia_pagamento) {
+        const pix = document.createElement("div");
+        pix.className = "detalhe";
+        pix.textContent = `PIX: ${r.referencia_pagamento}`;
+        item.appendChild(pix);
+      }
 
       const cancelar = document.createElement("button");
-      cancelar.className = "perigo";
-      cancelar.textContent = "Cancelar";
-      cancelar.addEventListener("click", async () => {
-        if (!cancelar.classList.contains("confirmar")) {
-          cancelar.classList.add("confirmar");
-          cancelar.textContent = "Confirmar cancelamento";
-          return;
-        }
-        cancelar.disabled = true;
-        const resultado = await fetch(`/menu/reservas/${r.reserva_id}`, { method: "DELETE" });
-        const corpo = await resultado.json();
-        if (resultado.ok) {
-          balao(`🗑️ **Reserva ${corpo.reserva_id} cancelada:** ${corpo.area}, ${dataBR(corpo.data)}, ${NOMES_DOS_PERIODOS[corpo.periodo]}. A taxa também foi cancelada.`);
-          cartao.remove();
-          atualizarTitulo();
-        } else {
-          balao(motivo(corpo), "sistema");
-          cancelar.disabled = false;
-        }
-      });
-      cartao.append(info, cancelar);
-      painel.appendChild(cartao);
+      cancelar.type = "button";
+      const confirmando = cancelandoId === r.reserva_id;
+      cancelar.className = confirmando ? "confirmar" : "";
+      cancelar.textContent = confirmando ? "Confirmar cancelamento" : "Cancelar";
+      cancelar.addEventListener("click", () => cancelarReserva(r, cancelar));
+      item.appendChild(cancelar);
+      listaReservas.appendChild(item);
     }
-    atualizarTitulo();
-    conversa.appendChild(painel);
-    rolar();
+  }
+
+  // Dois cliques: o primeiro pede confirmação, o segundo cancela.
+  async function cancelarReserva(r, botao) {
+    if (cancelandoId !== r.reserva_id) {
+      for (const outro of listaReservas.querySelectorAll("button.confirmar")) {
+        outro.className = "";
+        outro.textContent = "Cancelar";
+      }
+      cancelandoId = r.reserva_id;
+      botao.className = "confirmar";
+      botao.textContent = "Confirmar cancelamento";
+      return;
+    }
+    botao.disabled = true;
+    try {
+      const resultado = await fetch(`/menu/reservas/${encodeURIComponent(r.reserva_id)}`, { method: "DELETE" });
+      const corpo = await lerJson(resultado);
+      if (resultado.ok) {
+        cancelandoId = null;
+        painel.classList.remove("aberto");
+        cartaoConfirmacao({ ...r, ...corpo, cancelada: true });
+        atualizarReservas();
+        return;
+      }
+      balao(motivo(corpo), "sistema");
+    } catch {
+      balao("Sem conexão com o sistema. Tente de novo.", "sistema");
+    }
+    botao.disabled = false;
+  }
+
+  function abrirPainel() {
+    painel.classList.add("aberto");
+    atualizarReservas();
+    if (getComputedStyle(painel).position === "fixed") document.getElementById("fechar").focus();
+  }
+
+  // Rodapé técnico: o correlation_id da última mensagem, para achar a jornada no CloudWatch.
+  function mostrarCorrelacao(id) {
+    if (!id) return;
+    document.getElementById("cid").textContent = id;
+    document.getElementById("copiar").textContent = "copiar";
+    document.getElementById("rodape").hidden = false;
+  }
+
+  async function copiar(valor) {
+    try { await navigator.clipboard.writeText(valor); return true; } catch {}
+    // Sem HTTPS o navigator.clipboard não existe: copia pelo jeito antigo.
+    const area = document.createElement("textarea");
+    area.value = valor;
+    document.body.appendChild(area);
+    area.select();
+    const copiou = document.execCommand("copy");
+    area.remove();
+    return copiou;
   }
 
   async function mandar(mensagem) {
+    // Um pedido por vez: dois toques rápidos num botão não viram duas reservas.
+    if (enviando) return;
+    enviando = true;
+    for (const antigas of conversa.querySelectorAll(".rapidas")) antigas.remove();
     balao(mensagem, "morador");
-    enviar.disabled = true;
-    const espera = balao("digitando…", "digitando");
+    enviar.disabled = nova.disabled = true;
+    const espera = digitando();
     try {
       const resposta = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensagem, conversa_id: conversaId }),
       });
-      const corpo = await resposta.json();
+      mostrarCorrelacao(resposta.headers.get("X-Correlation-Id"));
+      const corpo = await lerJson(resposta);
       espera.remove();
-      if (corpo.conversa_id) conversaId = corpo.conversa_id;
+      if (corpo.conversa_id) { conversaId = corpo.conversa_id; guardarConversa(conversaId); }
       balao(corpo.resposta || MOTIVOS.sistema_indisponivel, resposta.ok ? "" : "sistema");
+      const acoes = Array.isArray(corpo.acoes) ? corpo.acoes : [];
+      const disponibilidade = Array.isArray(corpo.disponibilidade) ? corpo.disponibilidade : [];
+      for (const acao of acoes) cartaoConfirmacao(acao);
+      // Com reserva feita, o cartão de confirmação basta.
+      if (disponibilidade.length && !acoes.some(a => !a.cancelada)) cartaoDisponibilidade(disponibilidade);
       if (corpo.modo === "menu") await mostrarMenu();
+      else if (resposta.ok && !acoes.length && !disponibilidade.length) respostasRapidas(corpo.resposta || "");
     } catch {
       espera.remove();
       balao("Sem conexão com o sistema. Tente de novo.", "sistema");
     } finally {
-      enviar.disabled = false;
+      enviando = false;
+      enviar.disabled = nova.disabled = false;
       texto.focus();
+      atualizarReservas();
     }
+  }
+
+  function boasVindas() {
+    const elemento = balao(
+      "Olá! Sou o atendente virtual do condomínio. Posso:\n" +
+      "- **consultar** se uma área está livre (salão de festas, churrasqueira ou quadra)\n" +
+      "- **reservar** para você, já com a taxa\n" +
+      "- **mostrar e cancelar** as suas reservas\n" +
+      "Escreva do seu jeito, ou toque numa sugestão:"
+    );
+    const sugestoes = document.createElement("div");
+    sugestoes.className = "sugestoes";
+    sugestoes.append(
+      chip("A churrasqueira está livre no sábado?", () => mandar("A churrasqueira está livre no sábado?")),
+      chip("Quero reservar o salão de festas", () => mandar("Quero reservar o salão de festas")),
+      chip("Minhas reservas", abrirPainel),
+    );
+    elemento.appendChild(sugestoes);
+  }
+
+  // Ao abrir: retoma a conversa guardada. Se ela não existir mais ou a rota falhar, começa outra.
+  async function iniciar() {
+    const guardada = lerConversaGuardada();
+    if (guardada) {
+      try {
+        const resposta = await fetch(`/chat/${encodeURIComponent(guardada)}`);
+        const corpo = resposta.ok ? await lerJson(resposta) : {};
+        const mensagens = Array.isArray(corpo.mensagens) ? corpo.mensagens : [];
+        if (mensagens.length) {
+          conversaId = guardada;
+          for (const m of mensagens) balao(String(m.texto ?? ""), m.papel === "user" ? "morador" : "");
+          const ultima = mensagens[mensagens.length - 1];
+          if (ultima.papel !== "user") respostasRapidas(String(ultima.texto ?? ""));
+          return;
+        }
+      } catch {}
+      guardarConversa(null);
+    }
+    boasVindas();
   }
 
   document.getElementById("envio").addEventListener("submit", evento => {
     evento.preventDefault();
     const mensagem = texto.value.trim();
-    if (!mensagem) return;
+    if (!mensagem || enviando) return;
     texto.value = "";
     mandar(mensagem);
   });
@@ -267,26 +702,28 @@
   document.getElementById("atalhos").addEventListener("click", evento => {
     const botao = evento.target.closest("button");
     if (!botao) return;
-    if (botao.dataset.acao === "minhas") mostrarMinhasReservas();
+    if (botao.dataset.acao === "minhas") abrirPainel();
     else if (botao.dataset.acao === "formulario") mostrarMenu();
     else if (botao.dataset.texto) mandar(botao.dataset.texto);
   });
 
-  const boasVindas = balao(
-    "Olá! Sou o atendente virtual do condomínio. Posso:\n" +
-    "- **consultar** se uma área está livre (salão de festas, churrasqueira ou quadra)\n" +
-    "- **reservar** para você, já com a taxa\n" +
-    "- **mostrar e cancelar** as suas reservas\n" +
-    "Escreva do seu jeito, ou toque numa sugestão:"
-  );
-  const sugestoes = document.createElement("div");
-  sugestoes.className = "sugestoes";
-  sugestoes.append(
-    chip("A churrasqueira está livre no sábado?", () => mandar("A churrasqueira está livre no próximo sábado?")),
-    chip("Quero reservar o salão de festas", () => mandar("Quero reservar o salão de festas")),
-    chip("📋 Minhas reservas", mostrarMinhasReservas),
-  );
-  boasVindas.appendChild(sugestoes);
+  nova.addEventListener("click", () => {
+    conversaId = null;
+    guardarConversa(null);
+    conversa.replaceChildren();
+    boasVindas();
+    texto.focus();
+  });
+
+  document.getElementById("fechar").addEventListener("click", () => painel.classList.remove("aberto"));
+
+  document.getElementById("copiar").addEventListener("click", async evento => {
+    const copiou = await copiar(document.getElementById("cid").textContent);
+    evento.target.textContent = copiou ? "copiado" : "não deu para copiar";
+  });
+
+  iniciar();
+  atualizarReservas();
 </script>
 </body>
 </html>

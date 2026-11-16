@@ -9,7 +9,7 @@ import random
 import threading
 import time
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 
 import boto3
 import pytest
@@ -110,7 +110,7 @@ def test_jornada_completa_da_conversa_ate_a_cobranca():
     assert resposta.headers["X-Correlation-Id"] == cid
     corpo = resposta.json()
     assert corpo["modo"] == "ia"
-    assert "reserva_id" in corpo["resposta"]
+    assert corpo["acoes"][0]["reserva_id"]
 
     assert contar("reserva") == 1
     assert consulta("SELECT valor FROM lancamento_financeiro")[0]["valor"] == 150
@@ -128,13 +128,13 @@ def test_jornada_completa_da_conversa_ate_a_cobranca():
 
 def test_consulta_real_mostra_o_que_esta_ocupado():
     data = data_futura()
-    livre = chat(f"o salão está livre em {data}?").json()["resposta"]
-    assert "noite" in livre
+    livre = chat(f"o salão está livre em {data}?").json()["disponibilidade"]
+    assert livre[0]["periodos_livres"] == ["manha", "tarde", "noite"]
     assert contar("reserva") == 0, "consultar não pode criar reserva"
 
     assert chat(f"reserva o salão em {data} à noite").status_code == 200
-    depois = chat(f"o salão está livre em {data}?").json()["resposta"]
-    assert '"periodos_livres": ["manha", "tarde"]' in depois
+    depois = chat(f"o salão está livre em {data}?").json()["disponibilidade"]
+    assert depois[0]["periodos_livres"] == ["manha", "tarde"]
 
 
 def test_horario_ocupado_e_recusado_sem_gravar_nada():
@@ -319,7 +319,14 @@ def test_o_que_vai_para_o_modelo():
         for f in primeira["toolConfig"]["tools"]
         for campo in f["toolSpec"]["inputSchema"]["json"]["properties"]
     }
-    assert campos == {"area", "data", "periodo", "reserva_id"}
+    assert campos == {"area", "data", "data_fim", "periodo", "reserva_id"}
+
+    # O contexto vem do servidor: dia da semana, taxas e quem é o morador, lido do banco.
+    sistema = primeira["system"][0]["text"]
+    hoje = reservas.hoje()
+    assert f"Hoje é {hoje.isoformat()}, {reservas.DIAS_DA_SEMANA[hoje.weekday()]}" in sistema
+    assert "Salão de festas (taxa de R$ 150,00)" in sistema
+    assert "Morador Demo, da unidade 101" in sistema
 
     # A mensagem do assistente volta intacta, com o raciocínio, junto com o resultado.
     assistente, resultado = segunda["messages"][-2:]
@@ -492,3 +499,117 @@ def test_migracao_de_um_banco_da_v3():
     with pytest.raises(reservas.ReservaRecusada) as recusa:
         reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
     assert recusa.value.motivo == "horario_ocupado"
+
+
+# ---------------------------------------------------------------- v5: contexto, agenda e histórico
+
+def test_consulta_por_intervalo_e_sem_area():
+    amanha = reservas.hoje() + timedelta(days=1)
+    depois = amanha + timedelta(days=1)
+    reservas.criar_reserva(SALAO, amanha.isoformat(), "noite", banco.MORADOR_DEMO_ID)
+
+    agenda = reservas.consultar_agenda(amanha.isoformat(), depois.isoformat())["disponibilidade"]
+    # Três áreas em cada um dos dois dias, dia a dia.
+    assert [(d["data"], d["area"]) for d in agenda] == [
+        (dia.isoformat(), area) for dia in (amanha, depois) for area in banco.NOMES_DAS_AREAS
+    ]
+    livres = {(d["data"], d["area"]): d["periodos_livres"] for d in agenda}
+    assert livres[(amanha.isoformat(), SALAO)] == ["manha", "tarde"]
+    assert livres[(depois.isoformat(), SALAO)] == ["manha", "tarde", "noite"]
+    assert livres[(amanha.isoformat(), "Quadra")] == ["manha", "tarde", "noite"]
+    assert agenda[0]["dia_da_semana"] == reservas.DIAS_DA_SEMANA[amanha.weekday()]
+    assert agenda[0]["taxa"] == "150.00"
+
+    # Pelo chat: duas datas e nenhuma área viram uma consulta só, do intervalo inteiro.
+    corpo = chat(f"o que está livre entre {amanha} e {depois}?").json()
+    assistente = requests.get(f"{MODELO}/_requisicoes", timeout=5).json()[1]["messages"][-2]
+    pedidos = [b["toolUse"]["input"] for b in assistente["content"] if "toolUse" in b]
+    assert pedidos == [{"data": amanha.isoformat(), "data_fim": depois.isoformat()}]
+    assert [(d["data"], d["area"]) for d in corpo["disponibilidade"]] == [(d["data"], d["area"]) for d in agenda]
+    assert corpo["acoes"] == []
+    assert contar("reserva") == 1, "consultar não pode criar reserva"
+
+
+@pytest.mark.parametrize("dias_ate_o_fim, motivo", [(14, "intervalo_muito_longo"), (-1, "data_invalida")])
+def test_intervalo_invalido_e_recusado(dias_ate_o_fim, motivo):
+    inicio = reservas.hoje() + timedelta(days=2)
+    fim = inicio + timedelta(days=dias_ate_o_fim)
+    with pytest.raises(reservas.ReservaRecusada) as recusa:
+        reservas.consultar_agenda(inicio.isoformat(), fim.isoformat())
+    assert recusa.value.motivo == motivo
+    # 14 dias contando o primeiro ainda passa.
+    assert len(reservas.consultar_agenda(inicio.isoformat(), (inicio + timedelta(days=13)).isoformat(), SALAO)["disponibilidade"]) == 14
+
+
+def test_chat_devolve_as_acoes_feitas():
+    data = data_futura()
+    criada = chat(f"reserva o salão em {data} à noite").json()["acoes"]
+    reserva_id = consulta("SELECT id FROM reserva")[0]["id"]
+    assert criada == [{"reserva_id": reserva_id, "area": SALAO, "data": data, "periodo": "noite", "taxa": "150.00"}]
+
+    cancelada = chat(f"cancela a reserva {reserva_id}").json()["acoes"]
+    assert cancelada == [{"reserva_id": reserva_id, "area": SALAO, "data": data, "periodo": "noite", "cancelada": True}]
+
+    assert chat("bom dia").json()["acoes"] == []
+
+
+def test_historico_da_conversa():
+    conversa_id = chat("primeira mensagem").json()["conversa_id"]
+    chat("segunda mensagem", conversa_id=conversa_id)
+    chat("de outra conversa")
+
+    corpo = requests.get(f"{ATENDIMENTO}/chat/{conversa_id}", timeout=10).json()
+    assert corpo["conversa_id"] == conversa_id
+    assert [m["papel"] for m in corpo["mensagens"]] == ["user", "assistant", "user", "assistant"]
+    assert corpo["mensagens"][2]["texto"] == "segunda mensagem"
+
+    vazia = requests.get(f"{ATENDIMENTO}/chat/{uuid.uuid4()}", timeout=10)
+    assert vazia.status_code == 200 and vazia.json()["mensagens"] == []
+    assert requests.get(f"{ATENDIMENTO}/chat/nao-e-uuid", timeout=10).status_code == 422
+
+
+def test_minhas_reservas_mostra_a_referencia_do_pix():
+    reserva = reservar_pelo_menu()
+    assert esperar(lambda: status_do_lancamento(reserva["reserva_id"]) == "cobranca_gerada")
+
+    lista = requests.get(f"{ATENDIMENTO}/menu/minhas-reservas", timeout=10).json()["reservas"]
+    assert lista[0]["referencia_pagamento"].startswith("PIX-")
+
+
+def test_chat_devolve_a_disponibilidade_consultada():
+    data = data_futura()
+    reservas.criar_reserva(SALAO, data, "noite", banco.MORADOR_DEMO_ID)
+    corpo = chat(f"o salão está livre em {data}?").json()
+    dia = reservas.DIAS_DA_SEMANA[date.fromisoformat(data).weekday()]
+    assert corpo["disponibilidade"] == [
+        {"area": SALAO, "data": data, "dia_da_semana": dia, "periodos_livres": ["manha", "tarde"], "taxa": "150.00"}
+    ]
+    assert corpo["acoes"] == []
+
+    assert chat("bom dia").json()["disponibilidade"] == []
+    assert chat(f"reserva o salão em {data} à tarde").json()["disponibilidade"] == []
+
+
+def test_conversa_em_varios_passos_no_simulado():
+    """O simulado junta as respostas curtas do morador, como o modelo real."""
+    hoje = reservas.hoje()
+    sabado = hoje + timedelta(days=(5 - hoje.weekday() - 1) % 7 + 1)
+
+    primeira = chat("Churrasqueira").json()
+    conversa_id = primeira["conversa_id"]
+    assert primeira["resposta"] == "Para qual dia?"
+
+    segunda = chat("sábado", conversa_id=conversa_id).json()
+    assert [(d["area"], d["data"]) for d in segunda["disponibilidade"]] == [("Churrasqueira", sabado.isoformat())]
+    assert contar("reserva") == 0
+
+    # "20h" vira o período da noite, e área e dia vêm das mensagens anteriores.
+    terceira = chat("pode reservar às 20h", conversa_id=conversa_id).json()
+    assert terceira["acoes"] == [{
+        "reserva_id": consulta("SELECT id FROM reserva")[0]["id"],
+        "area": "Churrasqueira", "data": sabado.isoformat(), "periodo": "noite", "taxa": "80.00",
+    }]
+
+    # O texto que o botão de período da página manda.
+    quadra = chat(f"Reservar Quadra em {sabado.strftime('%d/%m/%Y')} de manhã").json()["acoes"]
+    assert [(a["area"], a["data"], a["periodo"]) for a in quadra] == [("Quadra", sabado.isoformat(), "manha")]
