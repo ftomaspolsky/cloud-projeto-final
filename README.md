@@ -66,9 +66,9 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **Rebalanceamento por zona do ECS está ligado:** depois de uma substituição, o serviço volta a ter
   uma task por zona sozinho, uns 12 min depois de a instância nova entrar no cluster.
 
-**Onde paramos (17/11):** as duas etapas estão de pé. São Paulo roda a v5; Ohio, a v4.
+**Onde paramos (17/11):** as duas etapas estão de pé, as duas na v5.
 
-- **Etapa 1, Ohio:** na v4 desde 12/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
+- **Etapa 1, Ohio:** na v5 desde 17/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
   `docs/arquitetura-ohio.png`.
 - **Etapa 2, São Paulo:** criada pelo Terraform em `infra/terraform/` (como rodar: o README de lá).
   Provado em 12/11: `destroy` completo e `apply` do zero numa passada só, com 77 recursos em 15 min 52 s,
@@ -81,13 +81,16 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **17/11, v5 publicada em São Paulo** por `terraform apply` (40 s, só a imagem nova do `atendimento`;
   a troca das tasks levou mais 140 s). As 2 tasks `healthy`, os 12 alarmes em OK, e o Haiku real
   respondeu "o que está livre no fim de semana?" com a consulta por intervalo, numa rodada só.
+- **17/11, v5 publicada em Ohio** pelo PC: imagem `atendimento:v5` e task definition revisão 6 (a 5
+  saiu por engano igual à 4, com a imagem v4, e não está em uso). Rollout em 130 s, 2 tasks `healthy`,
+  12 alarmes em OK, e a mesma pergunta respondida pelo Haiku real em 4,1 s. O `operacoes` não mudou.
 
 **Próximo passo:**
 
 1. Antes de apresentar, em Ohio: **cancelar as 3 reservas de teste** (12/12, 13/12 e 20/12), que lotam
    a unidade de demo. Desde a v4, dá para fazer pela própria página: "Minhas reservas" → "Cancelar".
 2. Atualizar o resumo público (artefato) com a etapa 2 e a v5.
-3. Decidir se Ohio também recebe a v5, para as duas etapas mostrarem a mesma versão no vídeo.
+3. Testar na AWS reserva e cancelamento com o prompt da v5 (até aqui, só consulta).
 4. Opcional: fechar a janela de ~1 min sem banco durante a rotação da senha, tentando também a versão
    `AWSPENDING` do segredo.
 
@@ -104,7 +107,7 @@ começam por uma linha de comentário.
      e `aws ecs update-service --task-definition <família>:<revisão>`. **O `operacoes` primeiro**, para ele já
      entender os eventos novos quando o `atendimento` novo subir.
 
-Hoje rodam, em Ohio, `atendimento:v4` (revisão 4) e `operacoes:v4` (revisão 2). Em São Paulo, o
+Hoje rodam, em Ohio, `atendimento:v5` (revisão 6) e `operacoes:v4` (revisão 2), que não mudou na v5. Em São Paulo, o
 `atendimento` da v5 (task definition revisão 4, imagem `4c2d0fdb81ac`) e o `operacoes` sem mudança
 desde a v4 (revisão 3).
 
@@ -115,7 +118,7 @@ automática de 05:08 tinha derrubado o chat de Ohio até as tasks serem reinicia
 deixou o banco indisponível por ~1 min, só durante a própria rotação, e o app voltou sozinho
 (`docs/evidencias/2026-11-12-sp-3-rotacao-da-senha.txt`).
 
-**v5 (16/11), publicada em São Paulo em 17/11; Ohio segue na v4:**
+**v5 (16/11), publicada em São Paulo e em Ohio em 17/11:**
 
 - **Agente com mais contexto:** o prompt leva o dia da semana, o calendário dos próximos 14 dias, as
   áreas com taxas, os horários dos períodos, as regras (limite e antecedência), o nome e a unidade do
