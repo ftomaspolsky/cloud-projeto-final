@@ -13,10 +13,12 @@ terraform {
     }
   }
 
-  # Estado remoto no bucket criado por ../bootstrap. O bloco backend não aceita
-  # variáveis, por isso o nome vai escrito aqui.
+  # Estado remoto no bucket criado por ../bootstrap. O nome do bucket leva o número da
+  # conta, e o bloco backend não aceita variáveis, por isso ele fica fora daqui e entra
+  # no `terraform init`, lido da saída do bootstrap (ver o README):
+  #   terraform init -backend-config="bucket=$(terraform "-chdir=../bootstrap" output -raw bucket_do_estado)"
+  # Assim o código roda em qualquer conta, sem editar nada.
   backend "s3" {
-    bucket       = "cloud-projeto-final-tfstate-116979769772-sa-east-1"
     key          = "ambiente/terraform.tfstate"
     region       = "sa-east-1"
     encrypt      = true

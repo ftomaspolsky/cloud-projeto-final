@@ -12,6 +12,11 @@ locals {
       for f in sort(fileset("${local.raiz}/app/${s}", "*")) : filesha1("${local.raiz}/app/${s}/${f}")
     ])), 0, 12)
   }
+
+  # O comando do Python muda com o sistema: "python" no Windows, "python3" no Linux e no
+  # macOS, onde "python" muitas vezes não existe. Caminho começando com letra de unidade
+  # ("C:") é Windows.
+  python = can(regex("^[A-Za-z]:", local.raiz)) ? "python" : "python3"
 }
 
 resource "aws_ecr_repository" "servico" {
@@ -30,7 +35,7 @@ resource "terraform_data" "imagem" {
   # espaço e acento, e o cmd do Windows estragava as aspas.
   provisioner "local-exec" {
     interpreter = [
-      "python", "${local.raiz}/scripts/publicar-imagem.py", var.regiao,
+      local.python, "${local.raiz}/scripts/publicar-imagem.py", var.regiao,
       aws_ecr_repository.servico[each.key].repository_url, local.tag[each.key],
     ]
     command = "${local.raiz}/app/${each.key}"
