@@ -66,22 +66,29 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **Rebalanceamento por zona do ECS está ligado:** depois de uma substituição, o serviço volta a ter
   uma task por zona sozinho, uns 12 min depois de a instância nova entrar no cluster.
 
-**Onde paramos (12/11, ~15:50 UTC):** as duas etapas estão de pé.
+**Onde paramos (17/11):** as duas etapas estão de pé. São Paulo roda a v5; Ohio, a v4.
 
-- **Etapa 1, Ohio:** inalterada desde 11/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
+- **Etapa 1, Ohio:** na v4 desde 12/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
   `docs/arquitetura-ohio.png`.
 - **Etapa 2, São Paulo:** criada pelo Terraform em `infra/terraform/` (como rodar: o README de lá).
   Provado em 12/11: `destroy` completo e `apply` do zero numa passada só, com 77 recursos em 15 min 52 s,
   as imagens geradas e enviadas pelo próprio `apply`; depois, a conversa com o Haiku (perfil `global.`)
   reservou, e o `operacoes` processou o evento com o mesmo `correlation_id`. Os 12 alarmes em OK.
   Evidências em `docs/evidencias/2026-11-12-sp-*`.
+- **17/11, o Terraform roda em qualquer conta e sistema:** o nome do bucket do estado, que leva o
+  número da conta, saiu do código e entra no `terraform init`; o Python é chamado como `python3` fora
+  do Windows. Conferido com `fmt`, `validate`, `init` no PowerShell e no bash, e `plan`.
+- **17/11, v5 publicada em São Paulo** por `terraform apply` (40 s, só a imagem nova do `atendimento`;
+  a troca das tasks levou mais 140 s). As 2 tasks `healthy`, os 12 alarmes em OK, e o Haiku real
+  respondeu "o que está livre no fim de semana?" com a consulta por intervalo, numa rodada só.
 
 **Próximo passo:**
 
 1. Antes de apresentar, em Ohio: **cancelar as 3 reservas de teste** (12/12, 13/12 e 20/12), que lotam
    a unidade de demo. Desde a v4, dá para fazer pela própria página: "Minhas reservas" → "Cancelar".
-2. Atualizar o resumo público (artefato) com a etapa 2 e a v4.
-3. Opcional: fechar a janela de ~1 min sem banco durante a rotação da senha, tentando também a versão
+2. Atualizar o resumo público (artefato) com a etapa 2 e a v5.
+3. Decidir se Ohio também recebe a v5, para as duas etapas mostrarem a mesma versão no vídeo.
+4. Opcional: fechar a janela de ~1 min sem banco durante a rotação da senha, tentando também a versão
    `AWSPENDING` do segredo.
 
 **Colar no CloudShell:** ele às vezes come o primeiro caractere de um bloco colado. Blocos longos
@@ -97,7 +104,9 @@ começam por uma linha de comentário.
      e `aws ecs update-service --task-definition <família>:<revisão>`. **O `operacoes` primeiro**, para ele já
      entender os eventos novos quando o `atendimento` novo subir.
 
-Hoje rodam, em Ohio, `atendimento:v4` (revisão 4) e `operacoes:v4` (revisão 2).
+Hoje rodam, em Ohio, `atendimento:v4` (revisão 4) e `operacoes:v4` (revisão 2). Em São Paulo, o
+`atendimento` da v5 (task definition revisão 4, imagem `4c2d0fdb81ac`) e o `operacoes` sem mudança
+desde a v4 (revisão 3).
 
 **v4 (12/11):** "minhas reservas" e cancelamento (pelo chat e pela página), front-end com sugestões e
 painéis, e a senha do banco relida no Secrets Manager quando o RDS a rotaciona. Em 12/11, a rotação
@@ -106,7 +115,7 @@ automática de 05:08 tinha derrubado o chat de Ohio até as tasks serem reinicia
 deixou o banco indisponível por ~1 min, só durante a própria rotação, e o app voltou sozinho
 (`docs/evidencias/2026-11-12-sp-3-rotacao-da-senha.txt`).
 
-**v5 (16/11), só no repositório, ainda não publicada em Ohio nem em São Paulo:**
+**v5 (16/11), publicada em São Paulo em 17/11; Ohio segue na v4:**
 
 - **Agente com mais contexto:** o prompt leva o dia da semana, o calendário dos próximos 14 dias, as
   áreas com taxas, os horários dos períodos, as regras (limite e antecedência), o nome e a unidade do
@@ -118,8 +127,9 @@ deixou o banco indisponível por ~1 min, só durante a própria rotação, e o a
 - **Front-end:** painel "Minhas reservas" ao lado do chat, que mostra a cobrança passando de
   "gerando" a "gerada"; cartão de confirmação; conversa que sobrevive ao recarregar; e o
   `correlation_id` da última mensagem no rodapé, para buscar no CloudWatch.
-- **Testes locais:** 40 passando. **Sem prova na AWS:** o comportamento do Haiku real com o prompt e
-  a ferramenta novos só se vê depois de publicar.
+- **Testes locais:** 42 passando em 17/11. **Na AWS (São Paulo, 17/11):** o Haiku real usou a
+  consulta por intervalo para sábado e domingo numa rodada só, em 4 s. Reserva e cancelamento com o
+  prompt novo ainda não foram testados na AWS.
 
 ## Arquitetura
 
