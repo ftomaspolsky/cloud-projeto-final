@@ -24,3 +24,8 @@ venv/
 .DS_Store
 Thumbs.db
 *.tfplan
+
+# Enunciado, instruções de entrega e roteiro (arquivos locais)
+Projeto_Semestral_Computacao_em_Nuvem.pdf
+Instrucoes_Entrega_Video_Projeto_Final_Computacao_em_Nuvem.pdf
+Roteiro_Video_Projeto_Final_Zelo.docx
