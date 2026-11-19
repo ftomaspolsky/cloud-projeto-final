@@ -14,6 +14,8 @@ x-aws-local: &aws-local
 x-modelo: &modelo
   BEDROCK_ENDPOINT_URL: http://bedrock-fake:9000
   BEDROCK_MODEL_ID: us.anthropic.claude-haiku-5-5
+  GUARDRAIL_ID: guardrail-simulada  # o mesmo simulado responde ao ApplyGuardrail
+  GUARDRAIL_VERSION: "1"
 
 x-db: &db
   DB_HOST: mysql

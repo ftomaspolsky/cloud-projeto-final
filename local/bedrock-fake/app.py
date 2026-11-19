@@ -152,7 +152,41 @@ def listar_requisicoes():
 @app.delete("/_requisicoes")
 def limpar_requisicoes():
     requisicoes.clear()
+    avaliacoes.clear()
     return {"ok": True}
+
+
+# A guardrail simulada: bloqueia frases típicas de prompt injection. NÃO prova que o filtro real
+# reconhece um ataque em português, nem que ele deixa passar pedidos normais: isso só na AWS.
+avaliacoes = []
+ATAQUE = re.compile(
+    r"ignore (as|todas as|suas) (instru|regras)|revele (o |o seu |seu )prompt|modo desenvolvedor",
+    re.IGNORECASE,
+)
+
+
+@app.get("/_avaliacoes")
+def listar_avaliacoes():
+    return avaliacoes
+
+
+@app.post("/guardrail/{guardrail_id}/version/{versao}/apply")
+async def aplicar_guardrail(guardrail_id: str, versao: str, request: Request):
+    corpo = await request.json()
+    texto = " ".join(c["text"]["text"] for c in corpo["content"] if "text" in c)
+    avaliacoes.append({"guardrail": guardrail_id, "versao": versao, "fonte": corpo["source"], "texto": texto})
+
+    if modo["valor"] == "guardrail_fora":
+        return erro(503, "ServiceUnavailableException")
+    if not ATAQUE.search(texto):
+        return {"action": "NONE", "outputs": [], "assessments": [{}], "usage": {}}
+    filtro = {"type": "PROMPT_ATTACK", "confidence": "HIGH", "action": "BLOCKED", "detected": True}
+    return {
+        "action": "GUARDRAIL_INTERVENED",
+        "outputs": [{"text": "Nao posso seguir com esse pedido."}],
+        "assessments": [{"contentPolicy": {"filters": [filtro]}}],
+        "usage": {},
+    }
 
 
 @app.post("/model/{model_id:path}/converse")

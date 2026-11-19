@@ -221,6 +221,9 @@ resource "aws_ecs_task_definition" "atendimento" {
     portMappings      = [{ containerPort = 8000, hostPort = 0, protocol = "tcp" }] # 0 = porta dinâmica
     environment = concat(local.ambiente_comum, [
       { name = "BEDROCK_MODEL_ID", value = var.perfil_do_modelo },
+      { name = "GUARDRAIL_ID", value = aws_bedrock_guardrail.prompt.guardrail_id },
+      { name = "GUARDRAIL_VERSION", value = aws_bedrock_guardrail_version.prompt.version },
+      { name = "GUARDRAIL_REGION", value = var.regiao_da_guardrail },
     ])
     secrets          = local.segredos_db
     logConfiguration = local.logs["atendimento"]

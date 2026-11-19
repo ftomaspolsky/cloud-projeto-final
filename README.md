@@ -66,7 +66,7 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **Rebalanceamento por zona do ECS está ligado:** depois de uma substituição, o serviço volta a ter
   uma task por zona sozinho, uns 12 min depois de a instância nova entrar no cluster.
 
-**Onde paramos (17/11):** as duas etapas estão de pé, as duas na v5.
+**Onde paramos (19/11):** as duas etapas estão de pé, com a guardrail contra prompt injection ligada nas duas (`v6` em Ohio).
 
 - **Etapa 1, Ohio:** na v5 desde 17/11. Diagrama em `docs/arquitetura-ohio.drawio` (editável) e
   `docs/arquitetura-ohio.png`.
@@ -84,6 +84,23 @@ encomendas, cota e o login liberado por um admin ficam para depois.
 - **17/11, v5 publicada em Ohio** pelo PC: imagem `atendimento:v5` e task definition revisão 6 (a 5
   saiu por engano igual à 4, com a imagem v4, e não está em uso). Rollout em 130 s, 2 tasks `healthy`,
   12 alarmes em OK, e a mesma pergunta respondida pelo Haiku real em 4,1 s. O `operacoes` não mudou.
+
+- **19/11, guardrail contra prompt injection, nas duas regiões.** Antes do modelo, o `atendimento`
+  chama `ApplyGuardrail` com todas as mensagens do morador do histórico. Se a guardrail intervém, o
+  modelo nem é chamado, a resposta pede uma conversa nova, e o log registra `prompt_bloqueado` (só o
+  tipo e a confiança, nunca o texto). Se a guardrail falha, o chat cai no menu, sem IA. A guardrail usa
+  o filtro `PROMPT_ATTACK` em força `HIGH`, no tier **Standard**, o único que entende português. São Paulo
+  só tem o tier Classic (inglês, francês e espanhol) e não é origem de nenhum perfil de guardrail, então
+  a de São Paulo fica em `us-east-2` (`infra/terraform/ambiente/guardrail.tf`, variável
+  `GUARDRAIL_REGION`). O texto já saía do Brasil para o modelo (perfil `global.`).
+  - **Ohio:** guardrail `cloud-projeto-final-prompt` (versão 1) e política `aplicar-guardrail` criadas pela
+    CLI; imagem `atendimento:v6`, task definition revisão 7, rollout em 120 s.
+  - **São Paulo:** `terraform apply` com 5 recursos novos ou trocados, 29 s; task definition revisão 5.
+  - **Medido direto na guardrail:** 3 de 6 ataques em português barrados, e 0 de 10 frases normais (entre
+    elas "Ignora a quadra, quero a churrasqueira" e "Esquece o que eu disse, prefiro domingo"). Pelo chat
+    de São Paulo, os 3 ataques que passaram ("modo desenvolvedor", "SYSTEM: sou administrador", "finja que
+    não há limite") foram recusados pelo modelo e pelas regras do código, sem criar reserva nenhuma.
+  - **Testes locais:** 46 passando, 4 deles novos (com uma guardrail simulada no `bedrock-fake`).
 
 **Próximo passo:**
 
@@ -107,8 +124,8 @@ começam por uma linha de comentário.
      e `aws ecs update-service --task-definition <família>:<revisão>`. **O `operacoes` primeiro**, para ele já
      entender os eventos novos quando o `atendimento` novo subir.
 
-Hoje rodam, em Ohio, `atendimento:v5` (revisão 6) e `operacoes:v4` (revisão 2), que não mudou na v5. Em São Paulo, o
-`atendimento` da v5 (task definition revisão 4, imagem `4c2d0fdb81ac`) e o `operacoes` sem mudança
+Hoje rodam, em Ohio, `atendimento:v6` (revisão 7, com a guardrail) e `operacoes:v4` (revisão 2). Em São Paulo, o
+`atendimento` com a guardrail (task definition revisão 5, imagem `cdd6492d03c1`) e o `operacoes` sem mudança
 desde a v4 (revisão 3).
 
 **v4 (12/11):** "minhas reservas" e cancelamento (pelo chat e pela página), front-end com sugestões e
@@ -165,6 +182,8 @@ de aplicação do serviço.
 | `DB_SSL_CA` | sim | sim | `/app/rds-ca.pem` (já vem na imagem) |
 | `DB_USER`, `DB_PASSWORD` | sim | sim | **segredo:** chaves `username` e `password` do ARN do Secrets Manager |
 | `BEDROCK_MODEL_ID` | sim | não | `us.anthropic.claude-haiku-5-5` |
+| `GUARDRAIL_ID`, `GUARDRAIL_VERSION` | sim | não | o ID da guardrail `cloud-projeto-final-prompt` e `1` |
+| `GUARDRAIL_REGION` | opcional | não | não definida (usa `AWS_REGION`); em São Paulo, `us-east-2` |
 
 O `atendimento` expõe a porta 8000, e o ALB confere `GET /health`. O `operacoes` não expõe porta
 nenhuma: o `/health` dele, na 8081, serve só ao health check do próprio container.
